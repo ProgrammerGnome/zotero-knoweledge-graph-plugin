@@ -46,14 +46,22 @@ export async function runCloudPipeline(articles: any[]) {
     const response = await fetch(CLOUD_FUNCTION_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      credentials: "omit", // Kötelező a Zoteróban a CORS miatt
+      credentials: "omit", 
       body: JSON.stringify({ articles })
     });
+
+    // ÚJ: Ellenőrizzük a nyers HTTP státuszt a JSON parsolás előtt!
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Szerver HTTP hiba! Státusz: ${response.status}. Részletek: ${errorText}`);
+    }
+
     const result = (await response.json()) as any;
     if (!result.success) throw new Error(result.error);
     ztoolkit.log("Felhő feldolgozás sikeres!");
-  } catch (error) {
-    ztoolkit.log("Hiba a Cloud Function hívásakor:", error);
+  } catch (error: any) {
+    // ÚJ: A hibát olvasható stringgé alakítjuk, hogy ne egy üres {} jelenjen meg!
+    ztoolkit.log("Hiba a Cloud Function hívásakor: " + (error.message || String(error)));
     throw error;
   }
 }

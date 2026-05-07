@@ -59,12 +59,23 @@ class Addon {
 
   public async runAiPipelineAndVisualize() {
     try {
+      /*
       ztoolkit.log("1. Zotero cikkek beolvasása...");
       const items = await extractZoteroItems();
       
       ztoolkit.log(`2. Adatok beküldése a felhőbe (${items.length} cikk)... Kérlek, várj!`);
       // Itt hívjuk a Cloud Run Function-t, ami elvégzi az AI és Neo4j folyamatokat
       await runCloudPipeline(items);
+      */
+     ztoolkit.log("1. Zotero cikkek beolvasása...");
+      const items = await extractZoteroItems();
+      
+      // ÚJ: Korlátozzuk szigorúan 2 cikkre a limit túllépés elkerülése miatt!
+      const limitedItems = items.slice(0, 2); 
+      
+      ztoolkit.log(`2. Adatok beküldése a felhőbe (${limitedItems.length} cikk)... Kérlek, várj!`);
+      
+      await runCloudPipeline(limitedItems);
 
       ztoolkit.log("3. Eredmény lekérése és Gráf megjelenítése...");
       this.openGraphWindow(); 
