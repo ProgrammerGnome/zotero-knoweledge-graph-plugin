@@ -2,88 +2,271 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Zotero AI Tudástérkép</title>
+    <title>Zotero AI Tudástérkép & Jegyzék</title>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background-color: #121212; color: #fff; font-family: sans-serif; }
-        canvas { display: block; cursor: pointer; }
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #121212; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
+        
+        /* Elrendezés: Felül a gráf, alul a táblázat */
+        #graph-container { flex: 1; position: relative; border-bottom: 2px solid #444; overflow: hidden; }
+        #table-container { height: 35%; overflow-y: auto; background: #1e1e1e; padding: 10px; }
+        
+        canvas { display: block; cursor: grab; }
+        canvas:active { cursor: grabbing; }
+
         #info-panel { 
-            position: absolute; top: 20px; left: 20px; background: rgba(40, 40, 40, 0.95); 
-            padding: 20px; border-radius: 8px; border: 1px solid #555;
-            max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); z-index: 100;
+            position: absolute; top: 10px; left: 10px; background: rgba(30, 30, 30, 0.9); 
+            padding: 15px; border-radius: 8px; border: 1px solid #555;
+            max-width: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 100;
         }
-        h2 { margin: 0; font-size: 18px; color: #4caf50; line-height: 1.2; }
-        .year { color: #ff9800; font-weight: bold; margin: 10px 0; display: block; }
-        #panel-summary-text { font-size: 14px; line-height: 1.6; color: #eee; margin-top: 10px; }
+        h2 { margin: 0; font-size: 16px; color: #4caf50; }
+        .year { color: #ff9800; font-weight: bold; font-size: 13px; }
+
+        /* Táblázat stílusok */
+        table { width: 100%; border-collapse: collapse; color: #ddd; font-size: 13px; }
+        th { text-align: left; background: #333; padding: 10px; position: sticky; top: 0; color: #4caf50; }
+        td { padding: 8px 10px; border-bottom: 1px solid #333; vertical-align: top; }
+        tr:hover { background: #252525; }
+        
+        .expand-icon { cursor: pointer; color: #4caf50; font-weight: bold; width: 20px; display: inline-block; transition: transform 0.2s; }
+        .expanded .expand-icon { transform: rotate(90deg); }
+        
+        .details-row { display: none; background: #151515; }
+        .details-container { padding: 10px 40px; border-left: 3px solid #4caf50; }
+        .rel-box { margin-bottom: 5px; font-size: 12px; }
+        .rel-label { color: #00e676; font-weight: bold; margin-right: 5px; }
+        .rel-item { color: #1e88e5; text-decoration: underline; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div id="info-panel">
-        <h2 id="panel-title">Tudástérkép</h2>
-        <span id="panel-year" class="year">Válassz egy cikket</span>
-        <p id="panel-summary-text">Kattints a kék körök egyikére az AI összefoglaló megjelenítéséhez.</p>
+
+    <div id="graph-container">
+        <div id="info-panel">
+            <h2 id="panel-title">Tudástérkép</h2>
+            <span id="panel-year" class="year">Válassz egy cikket</span>
+            <p id="panel-summary-text" style="font-size: 12px; line-height: 1.4;">Kattints a csomópontokra vagy görgess a nagyításhoz.</p>
+        </div>
+        <canvas id="graphCanvas"></canvas>
     </div>
-    <canvas id="graphCanvas"></canvas>
+
+    <div id="table-container">
+        <table id="articleTable">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Év</th>
+                    <th>Cím</th>
+                    <th>Összefoglaló (AI)</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+    
     <script>
         window.onload = () => {
             const Zotero = window.opener.Zotero;
             const graphData = Zotero.AddonTemplate.data.graphData;
+            if (!graphData || !graphData.nodes) return;
+
             const canvas = document.getElementById('graphCanvas');
             const ctx = canvas.getContext('2d');
-            
-            if (!graphData || !graphData.nodes) return;
-            
             const nodes = graphData.nodes;
             const edges = graphData.edges;
-            const radius = 25;
+            const radius = 22;
 
-            function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+            // Kamera állapota (eltolás és nagyítás)
+            let offsetX = 0, offsetY = 0, scale = 1;
+            let isDragging = false, startX = 0, startY = 0, dragDist = 0;
+
+            function resize() {
+                const container = document.getElementById('graph-container');
+                canvas.width = container.clientWidth;
+                canvas.height = container.clientHeight;
+            }
             window.onresize = () => { resize(); draw(); };
             resize();
 
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
+            // Kezdeti pozíciók
+            const centerX = canvas.width / 2, centerY = canvas.height / 2;
             nodes.forEach((n, i) => {
                 const angle = (i / nodes.length) * Math.PI * 2;
-                const dist = Math.min(canvas.width, canvas.height) * 0.35;
-                n.x = centerX + dist * Math.cos(angle);
-                n.y = centerY + dist * Math.sin(angle);
+                const dist = Math.min(canvas.width, canvas.height) * 0.3;
+                n.x = centerX + dist * Math.cos(angle); n.y = centerY + dist * Math.sin(angle);
             });
 
-            canvas.onclick = (e) => {
-                const rect = canvas.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
+            // --- TÁBLÁZAT ÉS LEKÉRDEZÉS LOGIKA ---
+            const tbody = document.getElementById('tableBody');
+            nodes.forEach(node => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><span class="expand-icon">▶</span></td>
+                    <td class="year">${node.year}</td>
+                    <td style="font-weight:bold">${node.title}</td>
+                    <td style="color:#bbb">${node.summary.substring(0, 100)}...</td>
+                `;
+                
+                const detailTr = document.createElement('tr');
+                detailTr.className = 'details-row';
+                
+                const outgoing = edges.filter(e => String(e.source) === String(node.id));
+                const incoming = edges.filter(e => String(e.target) === String(node.id));
 
-                const node = nodes.find(n => Math.hypot(n.x - x, n.y - y) < radius + 10);
-                if (node) {
+                const outHtml = outgoing.length > 0 ? outgoing.map(e => {
+                    const targetNode = nodes.find(n => String(n.id) === String(e.target));
+                    return `<div class="rel-box"><span class="rel-label">[${e.type}]</span> ➔ <span class="rel-item">${targetNode ? targetNode.title : 'Ismeretlen'}</span></div>`;
+                }).join('') : '<i> Nincs kimenő hivatkozás.</i>';
+
+                const inHtml = incoming.length > 0 ? incoming.map(e => {
+                    const sourceNode = nodes.find(n => String(n.id) === String(e.source));
+                    return `<div class="rel-box"><span class="rel-label">[${e.type}]</span> ➔ <span class="rel-item">${sourceNode ? sourceNode.title : 'Ismeretlen'}</span> hivatkozik rá</div>`;
+                }).join('') : '<i> Nem hivatkoznak rá.</i>';
+
+                detailTr.innerHTML = `
+                    <td colspan="4">
+                        <div class="details-container">
+                            <strong>AI összefoglaló:</strong> <p>${node.summary}</p>
+                            <div style="display:flex; gap: 40px;">
+                                <div><strong>Hivatkozik (Eredmények):</strong>${outHtml}</div>
+                                <div><strong>Hivatkozott (Források):</strong>${inHtml}</div>
+                            </div>
+                        </div>
+                    </td>
+                `;
+
+                tr.onclick = () => {
+                    const isVisible = detailTr.style.display === 'table-row';
+                    detailTr.style.display = isVisible ? 'none' : 'table-row';
+                    tr.classList.toggle('expanded', !isVisible);
+                    
                     document.getElementById('panel-title').innerText = node.title;
                     document.getElementById('panel-year').innerText = "Évszám: " + node.year;
                     document.getElementById('panel-summary-text').innerText = node.summary;
+                };
+
+                tbody.appendChild(tr);
+                tbody.appendChild(detailTr);
+            });
+
+            // --- EGÉR ESEMÉNYEK: MOZGATÁS (PAN), NAGYÍTÁS (ZOOM), KATTINTÁS (CLICK) ---
+            canvas.addEventListener('mousedown', (e) => { 
+                isDragging = true; 
+                dragDist = 0; 
+                startX = e.clientX - offsetX; 
+                startY = e.clientY - offsetY; 
+            });
+
+            canvas.addEventListener('mousemove', (e) => { 
+                if (isDragging) { 
+                    dragDist += Math.abs(e.movementX) + Math.abs(e.movementY); 
+                    offsetX = e.clientX - startX; 
+                    offsetY = e.clientY - startY; 
                     draw(); 
+                } 
+            });
+
+            // Görgő (Zoomolás) esemény
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault(); // Megakadályozzuk a weblap görgetését
+                const zoomSensitivity = 0.001;
+                const delta = e.deltaY * -zoomSensitivity;
+                const newScale = Math.min(Math.max(0.1, scale + delta), 5); // Skála határok: 0.1x - 5x
+                
+                // Kiszámítjuk, hogy az egér hova mutat a vásznon
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                // Korrigáljuk az eltolást, hogy oda zoomoljon, ahol az egér van
+                offsetX = mouseX - (mouseX - offsetX) * (newScale / scale);
+                offsetY = mouseY - (mouseY - offsetY) * (newScale / scale);
+                
+                scale = newScale;
+                draw();
+            });
+
+            // Kattintás (Node kijelölése és infó panel frissítése)
+            canvas.addEventListener('mouseup', (e) => { 
+                isDragging = false; 
+                
+                // Ha csak kattintott (és nem húzta az egeret)
+                if (dragDist < 5) {
+                    const rect = canvas.getBoundingClientRect();
+                    // A képernyő koordinátákat visszaszámoljuk a virtuális (zoomolt/eltolt) térre
+                    const clickX = (e.clientX - rect.left - offsetX) / scale;
+                    const clickY = (e.clientY - rect.top - offsetY) / scale;
+
+                    const node = nodes.find(n => Math.hypot(n.x - clickX, n.y - clickY) < radius + 10);
+                    if (node) {
+                        document.getElementById('panel-title').innerText = node.title;
+                        document.getElementById('panel-year').innerText = "Évszám: " + node.year;
+                        document.getElementById('panel-summary-text').innerText = node.summary;
+                    }
                 }
-            };
+            });
+
+            // Ha lehúzzuk az egeret a vászonról
+            canvas.addEventListener('mouseleave', () => isDragging = false);
+
+            function drawCurvedArrow(ctx, start, end, label, curveOffset, nodeRadius) {
+                const headlen = 10;
+                const angle = Math.atan2(end.y - start.y, end.x - start.x);
+                const midX = (start.x + end.x) / 2, midY = (start.y + end.y) / 2;
+                const cpX = midX + curveOffset * Math.cos(angle + Math.PI / 2), cpY = midY + curveOffset * Math.sin(angle + Math.PI / 2);
+
+                ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.quadraticCurveTo(cpX, cpY, end.x, end.y);
+                ctx.strokeStyle = "#555"; ctx.lineWidth = 1.5; ctx.stroke();
+
+                const arrowAngle = Math.atan2(end.y - cpY, end.x - cpX);
+                const arrowPosX = end.x - nodeRadius * Math.cos(arrowAngle), arrowPosY = end.y - nodeRadius * Math.sin(arrowAngle);
+
+                ctx.beginPath(); ctx.moveTo(arrowPosX, arrowPosY);
+                ctx.lineTo(arrowPosX - headlen * Math.cos(arrowAngle - Math.PI/7), arrowPosY - headlen * Math.sin(arrowAngle - Math.PI/7));
+                ctx.lineTo(arrowPosX - headlen * Math.cos(arrowAngle + Math.PI/7), arrowPosY - headlen * Math.sin(arrowAngle + Math.PI/7));
+                ctx.closePath(); ctx.fillStyle = "#777"; ctx.fill();
+
+                const textX = midX + (curveOffset * 0.6) * Math.cos(angle + Math.PI / 2), textY = midY + (curveOffset * 0.6) * Math.sin(angle + Math.PI / 2);
+                ctx.font = "bold 9px Arial";
+                const tw = ctx.measureText(label).width;
+                ctx.fillStyle = "rgba(18,18,18,0.8)"; ctx.fillRect(textX - tw/2 - 2, textY - 6, tw + 4, 12);
+                ctx.fillStyle = "#4caf50"; ctx.textAlign = "center"; ctx.fillText(label, textX, textY + 3);
+            }
 
             function draw() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.save(); 
+                
+                // Mátrix transzformációk (Eltolás, majd Nagyítás)
+                ctx.translate(offsetX, offsetY);
+                ctx.scale(scale, scale);
+
+                const edgeGroups = {};
                 edges.forEach(edge => {
-                    const s = nodes.find(n => String(n.id) === String(edge.source));
-                    const t = nodes.find(n => String(n.id) === String(edge.target));
-                    if (s && t) {
-                        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(t.x, t.y);
-                        ctx.strokeStyle = "#444"; ctx.lineWidth = 2; ctx.stroke();
-                        ctx.fillStyle = "#00e676"; ctx.font = "bold 10px Arial";
-                        ctx.fillText(edge.type, (s.x+t.x)/2, (s.y+t.y)/2);
-                    }
+                    const pairId = [edge.source, edge.target].sort().join('-');
+                    if (!edgeGroups[pairId]) edgeGroups[pairId] = [];
+                    edgeGroups[pairId].push(edge);
                 });
+
+                Object.values(edgeGroups).forEach(group => {
+                    group.forEach((edge, index) => {
+                        const s = nodes.find(n => String(n.id) === String(edge.source)), t = nodes.find(n => String(n.id) === String(edge.target));
+                        if (s && t) {
+                            let curve = group.length > 1 ? (index - (group.length - 1) / 2) * 35 : 0;
+                            // ITT CSERÉLTEM MEG A NYILAK IRÁNYÁT (t és s felcserélése)
+                            drawCurvedArrow(ctx, t, s, edge.type, curve, radius);
+                        }
+                    });
+                });
+
                 nodes.forEach(n => {
                     ctx.beginPath(); ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
                     ctx.fillStyle = "#1e88e5"; ctx.fill();
                     ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
-                    ctx.fillStyle = "#fff"; ctx.font = "11px Arial"; ctx.textAlign = "center";
-                    ctx.fillText(n.year, n.x, n.y + 5);
-                    const label = n.title.length > 20 ? n.title.substring(0,17)+"..." : n.title;
-                    ctx.fillText(label, n.x, n.y + radius + 15);
+                    ctx.fillStyle = "#fff"; ctx.font = "10px Arial"; ctx.textAlign = "center";
+                    ctx.fillText(n.year, n.x, n.y + 3);
+                    const lbl = n.title.length > 15 ? n.title.substring(0,12)+"..." : n.title;
+                    ctx.fillText(lbl, n.x, n.y + radius + 12);
                 });
+                ctx.restore();
             }
             draw();
         };

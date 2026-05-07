@@ -71,7 +71,7 @@ class Addon {
       const items = await extractZoteroItems();
       
       // ÚJ: Korlátozzuk szigorúan 2 cikkre a limit túllépés elkerülése miatt!
-      const limitedItems = items.slice(0, 2); 
+      const limitedItems = items.slice(0, 5); 
       
       ztoolkit.log(`2. Adatok beküldése a felhőbe (${limitedItems.length} cikk)... Kérlek, várj!`);
       
