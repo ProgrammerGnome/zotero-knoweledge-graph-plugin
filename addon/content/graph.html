@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Zotero AI Tudástérkép</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #121212; color: #fff; font-family: sans-serif; }
+        canvas { display: block; cursor: pointer; }
+        #info-panel { 
+            position: absolute; top: 20px; left: 20px; background: rgba(40, 40, 40, 0.95); 
+            padding: 20px; border-radius: 8px; border: 1px solid #555;
+            max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); z-index: 100;
+        }
+        h2 { margin: 0; font-size: 18px; color: #4caf50; line-height: 1.2; }
+        .year { color: #ff9800; font-weight: bold; margin: 10px 0; display: block; }
+        #panel-summary-text { font-size: 14px; line-height: 1.6; color: #eee; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div id="info-panel">
+        <h2 id="panel-title">Tudástérkép</h2>
+        <span id="panel-year" class="year">Válassz egy cikket</span>
+        <p id="panel-summary-text">Kattints a kék körök egyikére az AI összefoglaló megjelenítéséhez.</p>
+    </div>
+    <canvas id="graphCanvas"></canvas>
+    <script>
+        window.onload = () => {
+            const Zotero = window.opener.Zotero;
+            const graphData = Zotero.AddonTemplate.data.graphData;
+            const canvas = document.getElementById('graphCanvas');
+            const ctx = canvas.getContext('2d');
+            const nodes = graphData.nodes;
+            const edges = graphData.edges;
+            const radius = 25;
+
+            function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+            window.onresize = () => { resize(); draw(); };
+            resize();
+
+            // Pozicionálás: véletlenszerű elszórás helyett körkörös
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            nodes.forEach((n, i) => {
+                const angle = (i / nodes.length) * Math.PI * 2;
+                const dist = Math.min(canvas.width, canvas.height) * 0.35;
+                n.x = centerX + dist * Math.cos(angle);
+                n.y = centerY + dist * Math.sin(angle);
+            });
+
+            canvas.onclick = (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                const node = nodes.find(n => Math.hypot(n.x - x, n.y - y) < radius + 10);
+                if (node) {
+                    document.getElementById('panel-title').innerText = node.title;
+                    document.getElementById('panel-year').innerText = "Évszám: " + node.year;
+                    document.getElementById('panel-summary-text').innerText = node.summary;
+                    draw(); 
+                }
+            };
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                // Élek
+                edges.forEach(edge => {
+                    const s = nodes.find(n => String(n.id) === String(edge.source));
+                    const t = nodes.find(n => String(n.id) === String(edge.target));
+                    if (s && t) {
+                        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(t.x, t.y);
+                        ctx.strokeStyle = "#444"; ctx.lineWidth = 2; ctx.stroke();
+                        ctx.fillStyle = "#00e676"; ctx.font = "bold 10px Arial";
+                        ctx.fillText(edge.type, (s.x+t.x)/2, (s.y+t.y)/2);
+                    }
+                });
+                // Node-ok
+                nodes.forEach(n => {
+                    ctx.beginPath(); ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
+                    ctx.fillStyle = "#1e88e5"; ctx.fill();
+                    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
+                    ctx.fillStyle = "#fff"; ctx.font = "11px Arial"; ctx.textAlign = "center";
+                    ctx.fillText(n.year, n.x, n.y + 5);
+                    const label = n.title.length > 20 ? n.title.substring(0,17)+"..." : n.title;
+                    ctx.fillText(label, n.x, n.y + radius + 15);
+                });
+            }
+            draw();
+        };
+    </script>
+</body>
+</html>
