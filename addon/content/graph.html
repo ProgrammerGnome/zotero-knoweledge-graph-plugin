@@ -29,6 +29,9 @@
             const graphData = Zotero.AddonTemplate.data.graphData;
             const canvas = document.getElementById('graphCanvas');
             const ctx = canvas.getContext('2d');
+            
+            if (!graphData || !graphData.nodes) return;
+            
             const nodes = graphData.nodes;
             const edges = graphData.edges;
             const radius = 25;
@@ -37,7 +40,6 @@
             window.onresize = () => { resize(); draw(); };
             resize();
 
-            // Pozicionálás: véletlenszerű elszórás helyett körkörös
             const centerX = canvas.width / 2;
             const centerY = canvas.height / 2;
             nodes.forEach((n, i) => {
@@ -63,7 +65,6 @@
 
             function draw() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                // Élek
                 edges.forEach(edge => {
                     const s = nodes.find(n => String(n.id) === String(edge.source));
                     const t = nodes.find(n => String(n.id) === String(edge.target));
@@ -74,7 +75,6 @@
                         ctx.fillText(edge.type, (s.x+t.x)/2, (s.y+t.y)/2);
                     }
                 });
-                // Node-ok
                 nodes.forEach(n => {
                     ctx.beginPath(); ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
                     ctx.fillStyle = "#1e88e5"; ctx.fill();
