@@ -1,7 +1,8 @@
 // src/modules/neo4j.ts
 
 // IDE IS ILLYESZD BE A GOOGLE CLOUD RUN TRIGGER URL-EDET:
-const CLOUD_FUNCTION_URL = "https://zotero-plugin-189833862333.us-central1.run.app";
+//const CLOUD_FUNCTION_URL = "https://zotero-plugin-189833862333.us-central1.run.app";
+const CLOUD_FUNCTION_URL = "https://zotero-content-graph-plugin-function-189833862333.us-central1.run.app";
 
 export interface GraphNode {
   id: string;

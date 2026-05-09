@@ -5,11 +5,8 @@
     <title>Zotero AI Tudástérkép & Jegyzék</title>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background-color: #121212; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        
-        /* Elrendezés: Felül a gráf, alul a táblázat */
         #graph-container { flex: 1; position: relative; border-bottom: 2px solid #444; overflow: hidden; }
         #table-container { height: 35%; overflow-y: auto; background: #1e1e1e; padding: 10px; }
-        
         canvas { display: block; cursor: grab; }
         canvas:active { cursor: grabbing; }
 
@@ -35,6 +32,10 @@
         .rel-box { margin-bottom: 5px; font-size: 12px; }
         .rel-label { color: #00e676; font-weight: bold; margin-right: 5px; }
         .rel-item { color: #1e88e5; text-decoration: underline; cursor: pointer; }
+        
+        /* Címkék (Badges) */
+        .badge-local { background: #1e88e5; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-right: 6px; font-weight: bold;}
+        .badge-web { background: #f57c00; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-right: 6px; font-weight: bold;}
     </style>
 </head>
 <body>
@@ -74,7 +75,6 @@
             const edges = graphData.edges;
             const radius = 22;
 
-            // Kamera állapota (eltolás és nagyítás)
             let offsetX = 0, offsetY = 0, scale = 1;
             let isDragging = false, startX = 0, startY = 0, dragDist = 0;
 
@@ -86,7 +86,6 @@
             window.onresize = () => { resize(); draw(); };
             resize();
 
-            // Kezdeti pozíciók
             const centerX = canvas.width / 2, centerY = canvas.height / 2;
             nodes.forEach((n, i) => {
                 const angle = (i / nodes.length) * Math.PI * 2;
@@ -94,14 +93,15 @@
                 n.x = centerX + dist * Math.cos(angle); n.y = centerY + dist * Math.sin(angle);
             });
 
-            // --- TÁBLÁZAT ÉS LEKÉRDEZÉS LOGIKA ---
             const tbody = document.getElementById('tableBody');
             nodes.forEach(node => {
                 const tr = document.createElement('tr');
+                const badge = node.origin === 'web' ? '<span class="badge-web">WEB</span>' : '<span class="badge-local">HELYI</span>';
+                
                 tr.innerHTML = `
                     <td><span class="expand-icon">▶</span></td>
                     <td class="year">${node.year}</td>
-                    <td style="font-weight:bold">${node.title}</td>
+                    <td style="font-weight:bold">${badge}${node.title}</td>
                     <td style="color:#bbb">${node.summary.substring(0, 100)}...</td>
                 `;
                 
@@ -147,54 +147,28 @@
                 tbody.appendChild(detailTr);
             });
 
-            // --- EGÉR ESEMÉNYEK: MOZGATÁS (PAN), NAGYÍTÁS (ZOOM), KATTINTÁS (CLICK) ---
-            canvas.addEventListener('mousedown', (e) => { 
-                isDragging = true; 
-                dragDist = 0; 
-                startX = e.clientX - offsetX; 
-                startY = e.clientY - offsetY; 
-            });
-
-            canvas.addEventListener('mousemove', (e) => { 
-                if (isDragging) { 
-                    dragDist += Math.abs(e.movementX) + Math.abs(e.movementY); 
-                    offsetX = e.clientX - startX; 
-                    offsetY = e.clientY - startY; 
-                    draw(); 
-                } 
-            });
-
-            // Görgő (Zoomolás) esemény
+            canvas.addEventListener('mousedown', (e) => { isDragging = true; dragDist = 0; startX = e.clientX - offsetX; startY = e.clientY - offsetY; });
+            canvas.addEventListener('mousemove', (e) => { if (isDragging) { dragDist += Math.abs(e.movementX) + Math.abs(e.movementY); offsetX = e.clientX - startX; offsetY = e.clientY - startY; draw(); } });
             canvas.addEventListener('wheel', (e) => {
-                e.preventDefault(); // Megakadályozzuk a weblap görgetését
+                e.preventDefault();
                 const zoomSensitivity = 0.001;
                 const delta = e.deltaY * -zoomSensitivity;
-                const newScale = Math.min(Math.max(0.1, scale + delta), 5); // Skála határok: 0.1x - 5x
-                
-                // Kiszámítjuk, hogy az egér hova mutat a vásznon
+                const newScale = Math.min(Math.max(0.1, scale + delta), 5);
                 const rect = canvas.getBoundingClientRect();
                 const mouseX = e.clientX - rect.left;
                 const mouseY = e.clientY - rect.top;
-
-                // Korrigáljuk az eltolást, hogy oda zoomoljon, ahol az egér van
                 offsetX = mouseX - (mouseX - offsetX) * (newScale / scale);
                 offsetY = mouseY - (mouseY - offsetY) * (newScale / scale);
-                
                 scale = newScale;
                 draw();
             });
 
-            // Kattintás (Node kijelölése és infó panel frissítése)
             canvas.addEventListener('mouseup', (e) => { 
                 isDragging = false; 
-                
-                // Ha csak kattintott (és nem húzta az egeret)
                 if (dragDist < 5) {
                     const rect = canvas.getBoundingClientRect();
-                    // A képernyő koordinátákat visszaszámoljuk a virtuális (zoomolt/eltolt) térre
                     const clickX = (e.clientX - rect.left - offsetX) / scale;
                     const clickY = (e.clientY - rect.top - offsetY) / scale;
-
                     const node = nodes.find(n => Math.hypot(n.x - clickX, n.y - clickY) < radius + 10);
                     if (node) {
                         document.getElementById('panel-title').innerText = node.title;
@@ -203,8 +177,6 @@
                     }
                 }
             });
-
-            // Ha lehúzzuk az egeret a vászonról
             canvas.addEventListener('mouseleave', () => isDragging = false);
 
             function drawCurvedArrow(ctx, start, end, label, curveOffset, nodeRadius) {
@@ -234,8 +206,6 @@
             function draw() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.save(); 
-                
-                // Mátrix transzformációk (Eltolás, majd Nagyítás)
                 ctx.translate(offsetX, offsetY);
                 ctx.scale(scale, scale);
 
@@ -251,7 +221,6 @@
                         const s = nodes.find(n => String(n.id) === String(edge.source)), t = nodes.find(n => String(n.id) === String(edge.target));
                         if (s && t) {
                             let curve = group.length > 1 ? (index - (group.length - 1) / 2) * 35 : 0;
-                            // ITT CSERÉLTEM MEG A NYILAK IRÁNYÁT (t és s felcserélése)
                             drawCurvedArrow(ctx, t, s, edge.type, curve, radius);
                         }
                     });
@@ -259,7 +228,11 @@
 
                 nodes.forEach(n => {
                     ctx.beginPath(); ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
-                    ctx.fillStyle = "#1e88e5"; ctx.fill();
+                    
+                    // Színezés az Origin alapján: Web = Narancs, Local = Kék
+                    ctx.fillStyle = n.origin === 'web' ? '#f57c00' : '#1e88e5'; 
+                    
+                    ctx.fill();
                     ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
                     ctx.fillStyle = "#fff"; ctx.font = "10px Arial"; ctx.textAlign = "center";
                     ctx.fillText(n.year, n.x, n.y + 3);
