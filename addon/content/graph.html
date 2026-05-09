@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Zotero AI Tudástérkép & Jegyzék</title>
+    <title>Zotero AI Knowledge Map & Directory</title>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background-color: #121212; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
         #graph-container { flex: 1; position: relative; border-bottom: 2px solid #444; overflow: hidden; }
@@ -18,7 +18,6 @@
         h2 { margin: 0; font-size: 16px; color: #4caf50; }
         .year { color: #ff9800; font-weight: bold; font-size: 13px; }
 
-        /* Táblázat stílusok */
         table { width: 100%; border-collapse: collapse; color: #ddd; font-size: 13px; }
         th { text-align: left; background: #333; padding: 10px; position: sticky; top: 0; color: #4caf50; }
         td { padding: 8px 10px; border-bottom: 1px solid #333; vertical-align: top; }
@@ -33,7 +32,6 @@
         .rel-label { color: #00e676; font-weight: bold; margin-right: 5px; }
         .rel-item { color: #1e88e5; text-decoration: underline; cursor: pointer; }
         
-        /* Címkék (Badges) */
         .badge-local { background: #1e88e5; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-right: 6px; font-weight: bold;}
         .badge-web { background: #f57c00; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-right: 6px; font-weight: bold;}
     </style>
@@ -42,9 +40,9 @@
 
     <div id="graph-container">
         <div id="info-panel">
-            <h2 id="panel-title">Tudástérkép</h2>
-            <span id="panel-year" class="year">Válassz egy cikket</span>
-            <p id="panel-summary-text" style="font-size: 12px; line-height: 1.4;">Kattints a csomópontokra vagy görgess a nagyításhoz.</p>
+            <h2 id="panel-title">Knowledge Map</h2>
+            <span id="panel-year" class="year">Select an article</span>
+            <p id="panel-summary-text" style="font-size: 12px; line-height: 1.4;">Click on nodes or scroll to zoom.</p>
         </div>
         <canvas id="graphCanvas"></canvas>
     </div>
@@ -54,9 +52,9 @@
             <thead>
                 <tr>
                     <th></th>
-                    <th>Év</th>
-                    <th>Cím</th>
-                    <th>Összefoglaló (AI)</th>
+                    <th>Year</th>
+                    <th>Title</th>
+                    <th>Summary (AI)</th>
                 </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -96,7 +94,7 @@
             const tbody = document.getElementById('tableBody');
             nodes.forEach(node => {
                 const tr = document.createElement('tr');
-                const badge = node.origin === 'web' ? '<span class="badge-web">WEB</span>' : '<span class="badge-local">HELYI</span>';
+                const badge = node.origin === 'web' ? '<span class="badge-web">WEB</span>' : '<span class="badge-local">LOCAL</span>';
                 
                 tr.innerHTML = `
                     <td><span class="expand-icon">▶</span></td>
@@ -113,21 +111,21 @@
 
                 const outHtml = outgoing.length > 0 ? outgoing.map(e => {
                     const targetNode = nodes.find(n => String(n.id) === String(e.target));
-                    return `<div class="rel-box"><span class="rel-label">[${e.type}]</span> ➔ <span class="rel-item">${targetNode ? targetNode.title : 'Ismeretlen'}</span></div>`;
-                }).join('') : '<i> Nincs kimenő hivatkozás.</i>';
+                    return `<div class="rel-box"><span class="rel-label">[${e.type}]</span> ➔ <span class="rel-item">${targetNode ? targetNode.title : 'Unknown'}</span></div>`;
+                }).join('') : '<i> No outgoing references.</i>';
 
                 const inHtml = incoming.length > 0 ? incoming.map(e => {
                     const sourceNode = nodes.find(n => String(n.id) === String(e.source));
-                    return `<div class="rel-box"><span class="rel-label">[${e.type}]</span> ➔ <span class="rel-item">${sourceNode ? sourceNode.title : 'Ismeretlen'}</span> hivatkozik rá</div>`;
-                }).join('') : '<i> Nem hivatkoznak rá.</i>';
+                    return `<div class="rel-box"><span class="rel-label">[${e.type}]</span> ➔ <span class="rel-item">${sourceNode ? sourceNode.title : 'Unknown'}</span> references this</div>`;
+                }).join('') : '<i> No incoming references.</i>';
 
                 detailTr.innerHTML = `
                     <td colspan="4">
                         <div class="details-container">
-                            <strong>AI összefoglaló:</strong> <p>${node.summary}</p>
+                            <strong>AI Summary:</strong> <p>${node.summary}</p>
                             <div style="display:flex; gap: 40px;">
-                                <div><strong>Hivatkozik (Eredmények):</strong>${outHtml}</div>
-                                <div><strong>Hivatkozott (Források):</strong>${inHtml}</div>
+                                <div><strong>References (Results):</strong>${outHtml}</div>
+                                <div><strong>Referenced by (Sources):</strong>${inHtml}</div>
                             </div>
                         </div>
                     </td>
@@ -139,7 +137,7 @@
                     tr.classList.toggle('expanded', !isVisible);
                     
                     document.getElementById('panel-title').innerText = node.title;
-                    document.getElementById('panel-year').innerText = "Évszám: " + node.year;
+                    document.getElementById('panel-year').innerText = "Year: " + node.year;
                     document.getElementById('panel-summary-text').innerText = node.summary;
                 };
 
@@ -172,7 +170,7 @@
                     const node = nodes.find(n => Math.hypot(n.x - clickX, n.y - clickY) < radius + 10);
                     if (node) {
                         document.getElementById('panel-title').innerText = node.title;
-                        document.getElementById('panel-year').innerText = "Évszám: " + node.year;
+                        document.getElementById('panel-year').innerText = "Year: " + node.year;
                         document.getElementById('panel-summary-text').innerText = node.summary;
                     }
                 }
@@ -228,10 +226,7 @@
 
                 nodes.forEach(n => {
                     ctx.beginPath(); ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
-                    
-                    // Színezés az Origin alapján: Web = Narancs, Local = Kék
                     ctx.fillStyle = n.origin === 'web' ? '#f57c00' : '#1e88e5'; 
-                    
                     ctx.fill();
                     ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
                     ctx.fillStyle = "#fff"; ctx.font = "10px Arial"; ctx.textAlign = "center";

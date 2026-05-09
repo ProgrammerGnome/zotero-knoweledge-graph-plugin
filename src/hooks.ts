@@ -1,4 +1,3 @@
-// src/hooks.ts
 import { initLocale } from "./utils/locale";
 import { createZToolkit } from "./utils/ztoolkit";
 
@@ -25,22 +24,20 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
     `${addon.data.config.addonRef}-mainWindow.ftl`,
   );
 
-  // Egyetlen menüpont regisztrálása
   ztoolkit.Menu.register("menuTools", {
     tag: "menuitem",
     id: "zotero-menuitem-ai-graph-main",
-    label: "Zotero AI Tudástérkép...",
+    label: "Zotero AI Knowledge Map...",
     commandListener: () => {
       
       const dialogText = 
-        "Válaszd ki, melyik AI funkciót szeretnéd indítani!\n\n" +
-        "📚 1. Helyi Gráf Építése:\n" +
-        "A Zotero könyvtáradban lévő meglévő cikkek AI elemzése és vizualizációja.\n\n" +
-        "🌐 2. Webes Bővítés (OpenAlex):\n" +
-        "A helyi cikkek alapján hasonló publikációk keresése a weben, és azok elemzése.";
+        "Select which AI function you would like to start!\n\n" +
+        "📚 1. Build Local Graph:\n" +
+        "AI analysis and visualization of existing articles in your Zotero library.\n\n" +
+        "🌐 2. Web Expansion (OpenAlex):\n" +
+        "Search for similar publications on the web based on local articles, and analyze them.";
 
       try {
-        // A modern Zotero 7 / Mozilla Services API használata
         const Services = (globalThis as any).Services;
         const promptService = Services.prompt;
         
@@ -51,12 +48,12 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
 
         const result = promptService.confirmEx(
           win,
-          "Zotero AI Tudástérkép Indítópult",
+          "Zotero AI Knowledge Map Dashboard",
           dialogText,
           flags,
-          "1. Helyi Gráf", // Gomb 0
-          "2. Webes Bővítés", // Gomb 1
-          "Mégse", // Gomb 2
+          "1. Local Graph", 
+          "2. Web Expansion", 
+          "Cancel", 
           null,
           { value: false }
         );
@@ -67,11 +64,10 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
           addon.expandKnowledgeGraph();
         }
       } catch (error) {
-        // BIZTONSÁGI FALLBACK: Ha az operációs rendszer vagy a Zotero blokkolja a modern panelt
-        ztoolkit.log("A natív ablak nem indítható, fallback a beépített promptra.");
+        ztoolkit.log("Native window could not be started, falling back to built-in prompt.");
         
         const fallbackResult = win.prompt(
-          dialogText + "\n\nÍRD BE A VÁLASZTOTT FUNKCIÓ SZÁMÁT (1 vagy 2):",
+          dialogText + "\n\nENTER THE NUMBER OF THE CHOSEN FUNCTION (1 or 2):",
           "1"
         );
 
@@ -105,11 +101,9 @@ async function onNotify(
   ids: Array<string | number>,
   extraData: { [key: string]: any },
 ) {
-  // Értesítések
 }
 
 async function onPrefsEvent(type: string, data: { [key: string]: any }) {
-  // Beállítások eseményei
 }
 
 export default {

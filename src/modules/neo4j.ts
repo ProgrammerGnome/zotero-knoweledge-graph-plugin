@@ -1,7 +1,3 @@
-// src/modules/neo4j.ts
-
-// IDE IS ILLYESZD BE A GOOGLE CLOUD RUN TRIGGER URL-EDET:
-//const CLOUD_FUNCTION_URL = "https://zotero-plugin-189833862333.us-central1.run.app";
 const CLOUD_FUNCTION_URL = "https://zotero-content-graph-plugin-function-189833862333.us-central1.run.app";
 
 export interface GraphNode {
@@ -25,7 +21,7 @@ export interface GraphData {
 }
 
 export async function fetchGraphData(): Promise<GraphData> {
-  ztoolkit.log("Gráf adatok lekérése a felhőből...");
+  ztoolkit.log("Fetching graph data from the cloud...");
   try {
     const response = await fetch(CLOUD_FUNCTION_URL, {
       method: "GET",
@@ -33,7 +29,7 @@ export async function fetchGraphData(): Promise<GraphData> {
       credentials: "omit"
     });
     
-    if (!response.ok) throw new Error("Hálózati hiba a felhő lekérdezésekor.");
+    if (!response.ok) throw new Error("Network error while querying the cloud.");
     const json = (await response.json()) as any;
     
     return {
@@ -41,7 +37,7 @@ export async function fetchGraphData(): Promise<GraphData> {
       edges: json.edges || []
     };
   } catch (error) {
-    ztoolkit.log("Hiba a gráf lekérésekor:", error);
+    ztoolkit.log("Error fetching graph:", error);
     return { nodes: [], edges: [] };
   }
 }

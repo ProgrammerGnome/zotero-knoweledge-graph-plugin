@@ -1,13 +1,8 @@
-// src/modules/pipeline.ts
-
-// IDE ILLYESZD BE A GOOGLE CLOUD RUN TRIGGER URL-EDET:
 const CLOUD_FUNCTION_URL = "https://zotero-content-graph-plugin-function-189833862333.us-central1.run.app";
 
-// ÚJ: A függvény most már elfogad egy opcionális `specificItems` tömböt
 export async function extractZoteroItems(specificItems?: any[]): Promise<{id: string, title: string, year: string, text: string, origin: string}[]> {
-  ztoolkit.log("Zotero elemek lekérdezése...");
+  ztoolkit.log("Querying Zotero items...");
   
-  // Ha kaptunk konkrét cikkeket, azokat használjuk, ha nem, beolvassuk az egészet
   const items = (specificItems && specificItems.length > 0) 
     ? specificItems 
     : await Zotero.Items.getAll(Zotero.Libraries.userLibraryID, true, false);
@@ -16,8 +11,8 @@ export async function extractZoteroItems(specificItems?: any[]): Promise<{id: st
 
   for (const item of items) {
     if (item.isRegularItem()) {
-      const title = item.getField("title") || "Ismeretlen cím";
-      const date = item.getField("date") || "Ismeretlen év";
+      const title = item.getField("title") || "Unknown title";
+      const date = item.getField("date") || "Unknown year";
       const year = date.match(/\d{4}/)?.[0] || date;
       
       let textContent = "";
@@ -47,7 +42,7 @@ export async function extractZoteroItems(specificItems?: any[]): Promise<{id: st
 }
 
 export async function runCloudPipeline(articles: any[]) {
-  ztoolkit.log("Adatok küldése a Cloud Run mikroszolgáltatásnak...");
+  ztoolkit.log("Sending data to Cloud Run microservice...");
   try {
     const response = await fetch(CLOUD_FUNCTION_URL, {
       method: "POST",
@@ -58,14 +53,14 @@ export async function runCloudPipeline(articles: any[]) {
 
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Szerver HTTP hiba! Státusz: ${response.status}. Részletek: ${errorText}`);
+        throw new Error(`Server HTTP error! Status: ${response.status}. Details: ${errorText}`);
     }
 
     const result = (await response.json()) as any;
     if (!result.success) throw new Error(result.error);
-    ztoolkit.log("Felhő feldolgozás sikeres!");
+    ztoolkit.log("Cloud processing successful!");
   } catch (error: any) {
-    ztoolkit.log("Hiba a Cloud Function hívásakor: " + (error.message || String(error)));
+    ztoolkit.log("Error calling Cloud Function: " + (error.message || String(error)));
     throw error;
   }
 }
@@ -84,7 +79,7 @@ function reconstructAbstract(invertedIndex: any): string | null {
 }
 
 export async function fetchRelatedPapersFromWeb(titles: string[]): Promise<any[]> {
-  ztoolkit.log("Keresés a weben hasonló cikkek után (OpenAlex)...");
+  ztoolkit.log("Searching the web for similar articles (OpenAlex)...");
   const relatedArticles = [];
   
   const YOUR_EMAIL = "hallgato@uni.hu"; 
@@ -92,10 +87,10 @@ export async function fetchRelatedPapersFromWeb(titles: string[]): Promise<any[]
 
   for (const title of titles) {
     try {
-      ztoolkit.log(`Keresés az OpenAlex-ben: "${title}"`);
+      ztoolkit.log(`Searching OpenAlex: "${title}"`);
       
-      if (title === "Ismeretlen cím" || title.length < 5) {
-          ztoolkit.log("Kihagyva: Érvénytelen cím.");
+      if (title === "Unknown title" || title.length < 5) {
+          ztoolkit.log("Skipped: Invalid title.");
           continue;
       }
 
@@ -130,21 +125,21 @@ export async function fetchRelatedPapersFromWeb(titles: string[]): Promise<any[]
             relatedArticles.push({
               id: `OA_${paper.id.split('/').pop()}`,
               title: paper.title,
-              year: paper.publication_year ? String(paper.publication_year) : "Ismeretlen",
-              text: `[Webről importálva OpenAlex API-n keresztül] ${abstractText}`,
+              year: paper.publication_year ? String(paper.publication_year) : "Unknown",
+              text: `[Imported from web via OpenAlex API] ${abstractText}`,
               origin: "web" 
             });
-            ztoolkit.log(`+ Hozzáadva: ${paper.title}`);
+            ztoolkit.log(`+ Added: ${paper.title}`);
           }
         }
       }
       await delay(500);
 
     } catch (e) {
-      ztoolkit.log("Hiba az OpenAlex keresés során: " + e);
+      ztoolkit.log("Error during OpenAlex search: " + e);
     }
   }
   
-  ztoolkit.log(`Webes keresés befejezve. Összesen ${relatedArticles.length} db használható cikket találtunk.`);
+  ztoolkit.log(`Web search completed. Found a total of ${relatedArticles.length} usable articles.`);
   return relatedArticles;
 }

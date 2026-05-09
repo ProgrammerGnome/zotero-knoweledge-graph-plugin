@@ -1,4 +1,3 @@
-// src/addon.ts
 import { config } from "../package.json";
 import { ColumnOptions, DialogHelper } from "zotero-plugin-toolkit";
 import hooks from "./hooks";
@@ -59,44 +58,42 @@ class Addon {
     const mainWindow = Zotero.getMainWindow();
     const zoteroPane = Zotero.getActiveZoteroPane();
     
-    // Kijelölt cikkek lekérése a Zotero felületéről
     const selectedItems = zoteroPane ? zoteroPane.getSelectedItems() : [];
     const regularItems = selectedItems.filter((item: any) => item.isRegularItem());
 
     if (regularItems.length === 0) {
-      if (mainWindow) mainWindow.alert("Kérlek, jelölj ki egy vagy több cikket a Zotero listában az elemzéshez!");
+      if (mainWindow) mainWindow.alert("Please select one or more articles in the Zotero list for analysis!");
       return;
     }
 
-    const pw = new this.data.ztoolkit.ProgressWindow("Zotero AI Tudástérkép", {
+    const pw = new this.data.ztoolkit.ProgressWindow("Zotero AI Knowledge Map", {
       closeOnClick: false,
       closeTime: -1,
     });
     
-    const mainLine = pw.createLine({ text: "Pipeline indítása...", type: "info", progress: 0 });
+    const mainLine = pw.createLine({ text: "Starting pipeline...", type: "info", progress: 0 });
     pw.show();
 
     try {
-      mainLine.changeLine({ text: `Kijelölt cikkek beolvasása (${regularItems.length} db)...`, progress: 20 });
+      mainLine.changeLine({ text: `Reading selected articles (${regularItems.length} items)...`, progress: 20 });
       
-      // Csak a kijelölt cikkeket olvassuk be
       const limitedItems = await extractZoteroItems(regularItems); 
       
-      mainLine.changeLine({ text: `AI elemzés folyamatban (${limitedItems.length} cikk)...`, progress: 50 });
-      const subLine = pw.createLine({ text: "Kapcsolatok keresése a Neo4j-ben...", type: "info" });
+      mainLine.changeLine({ text: `AI analysis in progress (${limitedItems.length} articles)...`, progress: 50 });
+      const subLine = pw.createLine({ text: "Searching for relationships in Neo4j...", type: "info" });
 
       await runCloudPipeline(limitedItems);
 
-      mainLine.changeLine({ text: "Gráf renderelése...", progress: 90 });
-      subLine.changeLine({ text: "Adatok sikeresen feldolgozva.", type: "success" });
+      mainLine.changeLine({ text: "Rendering graph...", progress: 90 });
+      subLine.changeLine({ text: "Data processed successfully.", type: "success" });
 
       await this.openGraphWindow(); 
 
-      mainLine.changeLine({ text: "Kész!", progress: 100 });
+      mainLine.changeLine({ text: "Done!", progress: 100 });
       setTimeout(() => pw.close(), 800);
 
     } catch (error: any) { 
-      mainLine.changeLine({ text: "Hiba történt!", type: "error", progress: 0 });
+      mainLine.changeLine({ text: "An error occurred!", type: "error", progress: 0 });
       pw.createLine({ text: error?.message || String(error), type: "error" });
       pw.startCloseTimer(8000); 
     }
@@ -106,62 +103,57 @@ class Addon {
     const mainWindow = Zotero.getMainWindow();
     const zoteroPane = Zotero.getActiveZoteroPane();
     
-    // Kijelölt cikkek lekérése a Zotero felületéről
     const selectedItems = zoteroPane ? zoteroPane.getSelectedItems() : [];
     const regularItems = selectedItems.filter((item: any) => item.isRegularItem());
 
     if (regularItems.length === 0) {
-      if (mainWindow) mainWindow.alert("Kérlek, jelölj ki a Zoteroban legalább 1 cikket bázisként a webes kereséshez!");
+      if (mainWindow) mainWindow.alert("Please select at least 1 article in Zotero as a base for the web search!");
       return;
     }
     if (regularItems.length > 3) {
-      if (mainWindow) mainWindow.alert("Kérlek, maximum 3 cikket jelölj ki, hogy ne lépd túl a Google API kvótáját!");
+      if (mainWindow) mainWindow.alert("Please select a maximum of 3 articles to avoid exceeding the Google API quota!");
       return;
     }
 
-    const pw = new this.data.ztoolkit.ProgressWindow("Zotero AI Gráf Bővítése", {
+    const pw = new this.data.ztoolkit.ProgressWindow("Expanding Zotero AI Graph", {
       closeOnClick: false,
       closeTime: -1, 
     });
     
-    const mainLine = pw.createLine({ text: "Kijelölt bázis cikkek beolvasása...", type: "info", progress: 10 });
+    const mainLine = pw.createLine({ text: "Reading selected base articles...", type: "info", progress: 10 });
     pw.show();
 
     try {
-      // 1. Kijelölt HELYI cikkek beolvasása
       const localArticles = await extractZoteroItems(regularItems);
-      if (localArticles.length === 0) throw new Error("Nem sikerült beolvasni a cikkeket.");
+      if (localArticles.length === 0) throw new Error("Could not read articles.");
 
-      // 2. WEBES cikkek keresése a kijelöltek alapján
-      mainLine.changeLine({ text: "Hasonló cikkek keresése az OpenAlex adatbázisban...", progress: 30 });
+      mainLine.changeLine({ text: "Searching for similar articles in the OpenAlex database...", progress: 30 });
       const titlesToSearch = localArticles.map(item => item.title);
       const webArticles = await fetchRelatedPapersFromWeb(titlesToSearch);
 
       if (webArticles.length === 0) {
-        mainLine.changeLine({ text: "Nem találtam megfelelő új cikket.", type: "error", progress: 100 });
+        mainLine.changeLine({ text: "No suitable new articles found.", type: "error", progress: 100 });
         pw.startCloseTimer(4000);
         return;
       }
 
-      mainLine.changeLine({ text: `AI elemzés (${localArticles.length} helyi + ${webArticles.length} webes cikk)...`, progress: 60 });
-      const subLine = pw.createLine({ text: "Kapcsolatok keresése és mentés a Neo4j-be...", type: "info" });
+      mainLine.changeLine({ text: `AI analysis (${localArticles.length} local + ${webArticles.length} web articles)...`, progress: 60 });
+      const subLine = pw.createLine({ text: "Searching for relationships and saving to Neo4j...", type: "info" });
 
-      // ÚJ ÉS FONTOS: Összefűzzük a helyi és a webes cikkeket! 
-      // Így az LLM a felhőben egyszerre látja mindkettőt, és létrehozza köztük a kapcsolatokat!
       const combinedArticles = [...localArticles, ...webArticles];
 
       await runCloudPipeline(combinedArticles);
 
-      mainLine.changeLine({ text: "Bővített gráf renderelése...", progress: 90 });
-      subLine.changeLine({ text: "Adatok sikeresen feldolgozva.", type: "success" });
+      mainLine.changeLine({ text: "Rendering expanded graph...", progress: 90 });
+      subLine.changeLine({ text: "Data processed successfully.", type: "success" });
 
       await this.openGraphWindow(); 
 
-      mainLine.changeLine({ text: "Kész!", progress: 100 });
+      mainLine.changeLine({ text: "Done!", progress: 100 });
       setTimeout(() => pw.close(), 800);
 
     } catch (error: any) { 
-      mainLine.changeLine({ text: "Hiba történt a bővítés során!", type: "error", progress: 0 });
+      mainLine.changeLine({ text: "An error occurred during expansion!", type: "error", progress: 0 });
       pw.createLine({ text: error?.message || String(error), type: "error" });
       pw.startCloseTimer(8000); 
     }
