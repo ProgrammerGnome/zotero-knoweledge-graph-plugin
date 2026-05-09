@@ -25,20 +25,63 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
     `${addon.data.config.addonRef}-mainWindow.ftl`,
   );
 
+  // Egyetlen menüpont regisztrálása
   ztoolkit.Menu.register("menuTools", {
     tag: "menuitem",
-    id: "zotero-menuitem-build-graph",
-    label: "Zotero AI Gráf Építése (Helyi könyvtár)",
+    id: "zotero-menuitem-ai-graph-main",
+    label: "Zotero AI Tudástérkép...",
     commandListener: () => {
-      addon.runAiPipelineAndVisualize();
-    },
-  });
-  ztoolkit.Menu.register("menuTools", {
-    tag: "menuitem",
-    id: "zotero-menuitem-expand-graph",
-    label: "Zotero AI Gráf Bővítése webről (Semantic Scholar)",
-    commandListener: () => {
-      addon.expandKnowledgeGraph();
+      
+      const dialogText = 
+        "Válaszd ki, melyik AI funkciót szeretnéd indítani!\n\n" +
+        "📚 1. Helyi Gráf Építése:\n" +
+        "A Zotero könyvtáradban lévő meglévő cikkek AI elemzése és vizualizációja.\n\n" +
+        "🌐 2. Webes Bővítés (OpenAlex):\n" +
+        "A helyi cikkek alapján hasonló publikációk keresése a weben, és azok elemzése.";
+
+      try {
+        // A modern Zotero 7 / Mozilla Services API használata
+        const Services = (globalThis as any).Services;
+        const promptService = Services.prompt;
+        
+        const flags =
+          (promptService.BUTTON_TITLE_IS_STRING * promptService.BUTTON_POS_0) +
+          (promptService.BUTTON_TITLE_IS_STRING * promptService.BUTTON_POS_1) +
+          (promptService.BUTTON_TITLE_IS_STRING * promptService.BUTTON_POS_2);
+
+        const result = promptService.confirmEx(
+          win,
+          "Zotero AI Tudástérkép Indítópult",
+          dialogText,
+          flags,
+          "1. Helyi Gráf", // Gomb 0
+          "2. Webes Bővítés", // Gomb 1
+          "Mégse", // Gomb 2
+          null,
+          { value: false }
+        );
+
+        if (result === 0) {
+          addon.runAiPipelineAndVisualize();
+        } else if (result === 1) {
+          addon.expandKnowledgeGraph();
+        }
+      } catch (error) {
+        // BIZTONSÁGI FALLBACK: Ha az operációs rendszer vagy a Zotero blokkolja a modern panelt
+        ztoolkit.log("A natív ablak nem indítható, fallback a beépített promptra.");
+        
+        const fallbackResult = win.prompt(
+          dialogText + "\n\nÍRD BE A VÁLASZTOTT FUNKCIÓ SZÁMÁT (1 vagy 2):",
+          "1"
+        );
+
+        if (fallbackResult === "1") {
+          addon.runAiPipelineAndVisualize();
+        } else if (fallbackResult === "2") {
+          addon.expandKnowledgeGraph();
+        }
+      }
+      
     },
   });
 }
@@ -62,7 +105,7 @@ async function onNotify(
   ids: Array<string | number>,
   extraData: { [key: string]: any },
 ) {
-  // Ide jöhetnek az értesítések (pl. új elem hozzáadása)
+  // Értesítések
 }
 
 async function onPrefsEvent(type: string, data: { [key: string]: any }) {

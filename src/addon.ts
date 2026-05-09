@@ -58,87 +58,111 @@ class Addon {
   }
 
   public async runAiPipelineAndVisualize() {
-    // 1. Ablak inicializálása címmel és ikonnal
+    // 1. GUI bekérés a cikkek számára
+    const mainWindow = Zotero.getMainWindow();
+    let limit = 10; // Alapértelmezett érték
+    
+    if (mainWindow) {
+      const result = mainWindow.prompt("Hány cikket szeretnél elemezni a helyi könyvtárból?", "10");
+      if (result === null) return; // Ha a felhasználó a Mégse gombra kattint, kilépünk
+      
+      const parsed = parseInt(result, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        limit = parsed;
+      } else {
+        mainWindow.alert("Kérlek érvényes, nullánál nagyobb számot adj meg!");
+        return;
+      }
+    }
+
+    // 2. Ablak inicializálása címmel és ikonnal
     const pw = new this.data.ztoolkit.ProgressWindow("Zotero AI Tudástérkép", {
       closeOnClick: false,
-      closeTime: -1, // <--- EZ A KULCS! Letiltja az automatikus bezáródást
+      closeTime: -1,
     });
     
-    // Kezdő sor beállítása homokóra ikonnal ("info" típus)
     const mainLine = pw.createLine({
       text: "Pipeline indítása...",
       type: "info",
-      progress: 0 // Megjelenik a kék progress bar
+      progress: 0 
     });
     
     pw.show();
 
     try {
-      // 1. fázis: Cikkek beolvasása
       mainLine.changeLine({
-        text: "Cikkek beolvasása a könyvtárból...",
+        text: `Cikkek beolvasása a könyvtárból (max ${limit} db)...`,
         progress: 20
       });
       const items = await extractZoteroItems();
-      const limitedItems = items.slice(0, 5); 
       
-      // 2. fázis: Felhő alapú elemzés
+      // ITT HASZNÁLJUK A GUI-RÓL BEKÉRT ÉRTÉKET
+      const limitedItems = items.slice(0, limit); 
+      
       mainLine.changeLine({
         text: `AI elemzés folyamatban (${limitedItems.length} cikk)...`,
         progress: 50
       });
       
-      // Alsor hozzáadása a részletesebb infóhoz
       const subLine = pw.createLine({
         text: "Kapcsolatok keresése a Neo4j-ben...",
         type: "info"
       });
 
-      // Itt most már nem fog eltűnni az ablak várakozás közben!
       await runCloudPipeline(limitedItems);
 
-      // 3. fázis: Vizualizáció előkészítése
       mainLine.changeLine({
         text: "Gráf renderelése...",
         progress: 90
       });
       subLine.changeLine({
         text: "Adatok sikeresen feldolgozva.",
-        type: "success" // Pipa ikon
+        type: "success" 
       });
 
       await this.openGraphWindow(); 
 
-      // Befejezés: 100% és bezárás rövid késleltetéssel
       mainLine.changeLine({
         text: "Kész!",
         progress: 100
       });
       
-      // Rövid várakozás, hogy látható legyen a siker
       setTimeout(() => pw.close(), 800);
 
     } catch (error: any) { 
-      // Hiba kezelése piros ikonnal
       mainLine.changeLine({
         text: "Hiba történt!",
         type: "error",
         progress: 0
       });
       
-      // Részletes hiba kiírása egy új sorba
       pw.createLine({
         text: error?.message || String(error) || "Ismeretlen hiba a pipeline során.",
         type: "error"
       });
 
-      // A hiba ablaknál is be kell állítani az automatikus bezárást, mert a -1 miatt amúgy örökre ott maradna
       pw.startCloseTimer(8000); 
     }
   }
 
-  // Ezt másold be az Addon osztályba (src/addon.ts)
   public async expandKnowledgeGraph() {
+    // 1. GUI bekérés a cikkek számára
+    const mainWindow = Zotero.getMainWindow();
+    let limit = 3; // Alapértelmezett érték
+    
+    if (mainWindow) {
+      const result = mainWindow.prompt("Hány helyi báziscikket használjunk a webes kereséshez?", "3");
+      if (result === null) return; // Mégse gomb megnyomva
+      
+      const parsed = parseInt(result, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        limit = parsed;
+      } else {
+        mainWindow.alert("Kérlek érvényes, nullánál nagyobb számot adj meg!");
+        return;
+      }
+    }
+
     const pw = new this.data.ztoolkit.ProgressWindow("Zotero AI Gráf Bővítése", {
       closeOnClick: false,
       closeTime: -1, 
@@ -148,13 +172,13 @@ class Addon {
     pw.show();
 
     try {
-      // 1. Veszünk maximum 3 helyi cikket, amiből kiindulunk
       const localItems = await extractZoteroItems();
       if (localItems.length === 0) throw new Error("Nincs helyi cikk, amiből kiindulhatnánk.");
-      const limitedLocal = localItems.slice(0, 3); 
+      
+      // ITT HASZNÁLJUK A GUI-RÓL BEKÉRT ÉRTÉKET
+      const limitedLocal = localItems.slice(0, limit); 
 
-      // 2. Keresés a weben
-      mainLine.changeLine({ text: "Hasonló cikkek keresése a Semantic Scholaron...", progress: 30 });
+      mainLine.changeLine({ text: "Hasonló cikkek keresése az OpenAlex adatbázisban...", progress: 30 });
       const titlesToSearch = limitedLocal.map(item => item.title);
       const webArticles = await fetchRelatedPapersFromWeb(titlesToSearch);
 
@@ -164,13 +188,11 @@ class Addon {
         return;
       }
 
-      // 3. Új cikkek elküldése az LLM pipeline-nak
       mainLine.changeLine({ text: `AI elemzés (${webArticles.length} webes cikk)...`, progress: 60 });
       const subLine = pw.createLine({ text: "Kapcsolatok keresése és mentés a Neo4j-be...", type: "info" });
 
       await runCloudPipeline(webArticles);
 
-      // 4. Eredmény megjelenítése
       mainLine.changeLine({ text: "Bővített gráf renderelése...", progress: 90 });
       subLine.changeLine({ text: "Adatok sikeresen feldolgozva.", type: "success" });
 
@@ -185,7 +207,6 @@ class Addon {
       pw.startCloseTimer(8000); 
     }
   }
-
 }
 
 export default Addon;
