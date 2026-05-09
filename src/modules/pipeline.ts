@@ -19,7 +19,6 @@ export async function extractZoteroItems(): Promise<{id: string, title: string, 
       
       if (attachment && attachment.isPDFAttachment()) {
         try {
-            // Zotero 7+ kompatibilis szövegkinyerés
             const content = await (Zotero.Fulltext as any).getContent(attachment.id);
             textContent = content?.text || item.getField("abstractNote") || "";
         } catch (e) {
@@ -50,7 +49,6 @@ export async function runCloudPipeline(articles: any[]) {
       body: JSON.stringify({ articles })
     });
 
-    // ÚJ: Ellenőrizzük a nyers HTTP státuszt a JSON parsolás előtt!
     if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Szerver HTTP hiba! Státusz: ${response.status}. Részletek: ${errorText}`);
@@ -60,8 +58,116 @@ export async function runCloudPipeline(articles: any[]) {
     if (!result.success) throw new Error(result.error);
     ztoolkit.log("Felhő feldolgozás sikeres!");
   } catch (error: any) {
-    // ÚJ: A hibát olvasható stringgé alakítjuk, hogy ne egy üres {} jelenjen meg!
     ztoolkit.log("Hiba a Cloud Function hívásakor: " + (error.message || String(error)));
     throw error;
   }
+}
+
+// 1. Segédfüggvény a nagyon rövid várakozáshoz
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// 2. Segédfüggvény az OpenAlex absztraktok visszaállításához (Inverted Index -> String)
+function reconstructAbstract(invertedIndex: any): string | null {
+  if (!invertedIndex) return null;
+  const words: string[] = [];
+  for (const [word, positions] of Object.entries(invertedIndex)) {
+    for (const pos of positions as number[]) {
+      words[pos] = word;
+    }
+  }
+  return words.filter(w => w !== undefined).join(' ');
+}
+
+// 3. Főfüggvény a kereséshez (OpenAlex verzió)
+export async function fetchRelatedPapersFromWeb(titles: string[]): Promise<any[]> {
+  ztoolkit.log("Keresés a weben hasonló cikkek után (OpenAlex)...");
+  const relatedArticles = [];
+  
+  // !!! KÉRLEK ÍRD ÁT A SAJÁT EMAIL CÍMEDRE !!!
+  // Ezzel kerülsz be a másodpercenként 10 kérést engedélyező gyorsítósávba.
+  const YOUR_EMAIL = "hallgato@uni.hu"; 
+  const mailtoParam = `mailto=${YOUR_EMAIL}`;
+
+  for (const title of titles) {
+    try {
+      ztoolkit.log(`Keresés az OpenAlex-ben: "${title}"`);
+      
+      if (title === "Ismeretlen cím" || title.length < 5) {
+          ztoolkit.log("Kihagyva: Érvénytelen cím.");
+          continue;
+      }
+
+      // 1. Alap cikk megkeresése cím alapján
+      const query = encodeURIComponent(title);
+      const searchUrl = `https://api.openalex.org/works?search=${query}&per-page=1&${mailtoParam}`;
+      
+      const searchRes = await fetch(searchUrl);
+      if (!searchRes.ok) {
+          ztoolkit.log(`Keresési hiba (HTTP ${searchRes.status}) a "${title}" cikknél.`);
+          continue;
+      }
+      
+      const searchData = (await searchRes.json()) as any;
+      if (!searchData.results || searchData.results.length === 0) {
+          ztoolkit.log(`Nincs találat az OpenAlex-ben erre: "${title}".`);
+          continue;
+      }
+
+      const work = searchData.results[0];
+      const openAlexId = work.id; // pl. https://openalex.org/W1234567
+      ztoolkit.log(`Sikeres találat! ID: ${openAlexId}. Kapcsolódó cikkek letöltése...`);
+      
+      // 2. Kapcsolódó cikkek (related_works) URL-jeinek kinyerése
+      const relatedWorksUrls = work.related_works;
+      if (!relatedWorksUrls || relatedWorksUrls.length === 0) {
+          ztoolkit.log(`Nincsenek ajánlott cikkek a ${openAlexId} azonosítóhoz.`);
+          continue;
+      }
+
+      // Kinyerjük a legjobb 3 kapcsolódó cikk azonosítóját (pl. W1234567)
+      const topRelatedIds = relatedWorksUrls.slice(0, 3).map((url: string) => url.split('/').pop());
+
+      // 3. A 3 db ajánlott cikk teljes adatlapjának letöltése EGYETLEN kéréssel!
+      const filterParam = `openalex:${topRelatedIds.join('|')}`;
+      const recUrl = `https://api.openalex.org/works?filter=${filterParam}&${mailtoParam}`;
+      
+      const recRes = await fetch(recUrl);
+      if (!recRes.ok) {
+          ztoolkit.log(`Ajánlás adatok letöltése sikertelen.`);
+          continue;
+      }
+      
+      const recData = (await recRes.json()) as any;
+
+      if (recData.results && recData.results.length > 0) {
+        ztoolkit.log(`Találtunk ${recData.results.length} db ajánlott cikket!`);
+        
+        for (const paper of recData.results) {
+          // Az OpenAlex absztrakt összerakása olvasható szöveggé
+          const abstractText = reconstructAbstract(paper.abstract_inverted_index);
+          
+          if (abstractText) {
+            relatedArticles.push({
+              id: `OA_${paper.id.split('/').pop()}`, // pl. OA_W1234567
+              title: paper.title,
+              year: paper.publication_year ? String(paper.publication_year) : "Ismeretlen",
+              text: `[Webről importálva OpenAlex API-n keresztül] ${abstractText}`
+            });
+            ztoolkit.log(`+ Hozzáadva: ${paper.title}`);
+          } else {
+             ztoolkit.log(`- Kihagyva (nincs absztrakt): ${paper.title}`);
+          }
+        }
+      }
+
+      // Egy nagyon rövid, fél másodperces szünet, hogy biztosan ne terheljük túl az API-t (max 10 kérés/mp megengedett)
+      await delay(500);
+
+    } catch (e) {
+      ztoolkit.log("Hiba az OpenAlex keresés során: " + e);
+    }
+  }
+  
+  ztoolkit.log(`Webes keresés befejezve. Összesen ${relatedArticles.length} db használható cikket találtunk.`);
+  return relatedArticles;
 }

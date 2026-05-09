@@ -4,7 +4,7 @@ import { ColumnOptions, DialogHelper } from "zotero-plugin-toolkit";
 import hooks from "./hooks";
 import { createZToolkit } from "./utils/ztoolkit";
 import { fetchGraphData, GraphData } from "./modules/neo4j";
-import { extractZoteroItems, runCloudPipeline } from "./modules/pipeline";
+import { extractZoteroItems, runCloudPipeline, fetchRelatedPapersFromWeb } from "./modules/pipeline";
 
 class Addon {
   public data: {
@@ -136,6 +136,56 @@ class Addon {
       pw.startCloseTimer(8000); 
     }
   }
+
+  // Ezt másold be az Addon osztályba (src/addon.ts)
+  public async expandKnowledgeGraph() {
+    const pw = new this.data.ztoolkit.ProgressWindow("Zotero AI Gráf Bővítése", {
+      closeOnClick: false,
+      closeTime: -1, 
+    });
+    
+    const mainLine = pw.createLine({ text: "Bázis cikkek kiválasztása...", type: "info", progress: 10 });
+    pw.show();
+
+    try {
+      // 1. Veszünk maximum 3 helyi cikket, amiből kiindulunk
+      const localItems = await extractZoteroItems();
+      if (localItems.length === 0) throw new Error("Nincs helyi cikk, amiből kiindulhatnánk.");
+      const limitedLocal = localItems.slice(0, 3); 
+
+      // 2. Keresés a weben
+      mainLine.changeLine({ text: "Hasonló cikkek keresése a Semantic Scholaron...", progress: 30 });
+      const titlesToSearch = limitedLocal.map(item => item.title);
+      const webArticles = await fetchRelatedPapersFromWeb(titlesToSearch);
+
+      if (webArticles.length === 0) {
+        mainLine.changeLine({ text: "Nem találtam megfelelő új cikket.", type: "error", progress: 100 });
+        pw.startCloseTimer(4000);
+        return;
+      }
+
+      // 3. Új cikkek elküldése az LLM pipeline-nak
+      mainLine.changeLine({ text: `AI elemzés (${webArticles.length} webes cikk)...`, progress: 60 });
+      const subLine = pw.createLine({ text: "Kapcsolatok keresése és mentés a Neo4j-be...", type: "info" });
+
+      await runCloudPipeline(webArticles);
+
+      // 4. Eredmény megjelenítése
+      mainLine.changeLine({ text: "Bővített gráf renderelése...", progress: 90 });
+      subLine.changeLine({ text: "Adatok sikeresen feldolgozva.", type: "success" });
+
+      await this.openGraphWindow(); 
+
+      mainLine.changeLine({ text: "Kész!", progress: 100 });
+      setTimeout(() => pw.close(), 800);
+
+    } catch (error: any) { 
+      mainLine.changeLine({ text: "Hiba történt a bővítés során!", type: "error", progress: 0 });
+      pw.createLine({ text: error?.message || String(error), type: "error" });
+      pw.startCloseTimer(8000); 
+    }
+  }
+
 }
 
 export default Addon;

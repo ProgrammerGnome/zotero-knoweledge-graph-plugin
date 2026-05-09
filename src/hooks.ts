@@ -25,13 +25,20 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
     `${addon.data.config.addonRef}-mainWindow.ftl`,
   );
 
-  // Az AI Tudástérkép menüpontja a 'Tools' (Eszközök) menüben
   ztoolkit.Menu.register("menuTools", {
     tag: "menuitem",
     id: "zotero-menuitem-build-graph",
-    label: "Zotero AI Gráf Építése és Megjelenítése",
+    label: "Zotero AI Gráf Építése (Helyi könyvtár)",
     commandListener: () => {
       addon.runAiPipelineAndVisualize();
+    },
+  });
+  ztoolkit.Menu.register("menuTools", {
+    tag: "menuitem",
+    id: "zotero-menuitem-expand-graph",
+    label: "Zotero AI Gráf Bővítése webről (Semantic Scholar)",
+    commandListener: () => {
+      addon.expandKnowledgeGraph();
     },
   });
 }
