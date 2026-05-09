@@ -3,11 +3,11 @@
   "type": "module",
   "version": "1.0.0",
   "description": "Serverless AI Knowledge Graph Pipeline for Zotero",
-  "author": "MSc Hallgato",
-  "homepage": "https://github.com/MScHallgato/zotero-ai-knowledge-graph#readme",
+  "author": "Márk Király",
+  "homepage": "https://github.com/ProgrammerGnome/zotero-knoweledge-graph-plugin#readme",
   "license": "AGPL-3.0-or-later",
   "config": {
-    "addonName": "Zotero AI Tudástérkép",
+    "addonName": "Zotero knoweledge graph plugin",
     "addonID": "ai-knowledge-graph@yourdomain.com",
     "addonRef": "aigraph",
     "addonInstance": "AddonTemplate",
@@ -15,10 +15,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MScHallgato/zotero-ai-knowledge-graph.git"
+    "url": "git+https://github.com/ProgrammerGnome/zotero-knoweledge-graph-plugin.git"
   },
   "bugs": {
-    "url": "https://github.com/MScHallgato/zotero-ai-knowledge-graph/issues"
+    "url": "https://github.com/ProgrammerGnome/zotero-knoweledge-graph-plugin/issues"
   },
   "scripts": {
     "start": "zotero-plugin serve",
