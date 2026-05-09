@@ -13,11 +13,7 @@ class Addon {
     initialized?: boolean;
     ztoolkit: ZToolkit;
     locale?: { current: any; };
-    prefs?: {
-      window: Window;
-      columns: Array<ColumnOptions>;
-      rows: Array<{ [dataKey: string]: string }>;
-    };
+    prefs?: { window: Window; columns: Array<ColumnOptions>; rows: Array<{ [dataKey: string]: string }>; };
     dialog?: DialogHelper;
     graphData?: GraphData;
   };
@@ -25,20 +21,14 @@ class Addon {
   public api: object;
 
   constructor() {
-    this.data = {
-      alive: true,
-      config,
-      env: __env__,
-      initialized: false,
-      ztoolkit: createZToolkit(),
-    };
+    this.data = { alive: true, config, env: __env__, initialized: false, ztoolkit: createZToolkit(), };
     this.hooks = hooks;
     this.api = {};
   }
 
-  public async openGraphWindow() {
+  public async openGraphWindow(ids?: string[]) {
     try {
-      const graphData = await fetchGraphData();
+      const graphData = await fetchGraphData(ids);
       this.data.graphData = graphData;
 
       const mainWindow = Zotero.getMainWindow();
@@ -54,10 +44,24 @@ class Addon {
     }
   }
 
+  public async showFullGraph() {
+    const pw = new this.data.ztoolkit.ProgressWindow("Zotero AI Knowledge Map", { closeOnClick: false, closeTime: -1 });
+    const mainLine = pw.createLine({ text: "Loading full graph from database...", type: "info", progress: 50 });
+    pw.show();
+    try {
+      await this.openGraphWindow(); 
+      mainLine.changeLine({ text: "Done!", type: "success", progress: 100 });
+      setTimeout(() => pw.close(), 800);
+    } catch (error: any) {
+      mainLine.changeLine({ text: "An error occurred!", type: "error", progress: 0 });
+      pw.createLine({ text: error?.message || String(error), type: "error" });
+      pw.startCloseTimer(8000);
+    }
+  }
+
   public async runAiPipelineAndVisualize() {
     const mainWindow = Zotero.getMainWindow();
     const zoteroPane = Zotero.getActiveZoteroPane();
-    
     const selectedItems = zoteroPane ? zoteroPane.getSelectedItems() : [];
     const regularItems = selectedItems.filter((item: any) => item.isRegularItem());
 
@@ -66,17 +70,12 @@ class Addon {
       return;
     }
 
-    const pw = new this.data.ztoolkit.ProgressWindow("Zotero AI Knowledge Map", {
-      closeOnClick: false,
-      closeTime: -1,
-    });
-    
+    const pw = new this.data.ztoolkit.ProgressWindow("Zotero AI Knowledge Map", { closeOnClick: false, closeTime: -1 });
     const mainLine = pw.createLine({ text: "Starting pipeline...", type: "info", progress: 0 });
     pw.show();
 
     try {
       mainLine.changeLine({ text: `Reading selected articles (${regularItems.length} items)...`, progress: 20 });
-      
       const limitedItems = await extractZoteroItems(regularItems); 
       
       mainLine.changeLine({ text: `AI analysis in progress (${limitedItems.length} articles)...`, progress: 50 });
@@ -87,11 +86,11 @@ class Addon {
       mainLine.changeLine({ text: "Rendering graph...", progress: 90 });
       subLine.changeLine({ text: "Data processed successfully.", type: "success" });
 
-      await this.openGraphWindow(); 
+      const itemIds = limitedItems.map(item => item.id);
+      await this.openGraphWindow(itemIds); 
 
       mainLine.changeLine({ text: "Done!", progress: 100 });
       setTimeout(() => pw.close(), 800);
-
     } catch (error: any) { 
       mainLine.changeLine({ text: "An error occurred!", type: "error", progress: 0 });
       pw.createLine({ text: error?.message || String(error), type: "error" });
@@ -102,7 +101,6 @@ class Addon {
   public async expandKnowledgeGraph() {
     const mainWindow = Zotero.getMainWindow();
     const zoteroPane = Zotero.getActiveZoteroPane();
-    
     const selectedItems = zoteroPane ? zoteroPane.getSelectedItems() : [];
     const regularItems = selectedItems.filter((item: any) => item.isRegularItem());
 
@@ -110,22 +108,14 @@ class Addon {
       if (mainWindow) mainWindow.alert("Please select at least 1 article in Zotero as a base for the web search!");
       return;
     }
-    if (regularItems.length > 3) {
-      if (mainWindow) mainWindow.alert("Please select a maximum of 3 articles to avoid exceeding the Google API quota!");
-      return;
-    }
 
-    const pw = new this.data.ztoolkit.ProgressWindow("Expanding Zotero AI Graph", {
-      closeOnClick: false,
-      closeTime: -1, 
-    });
-    
+    const pw = new this.data.ztoolkit.ProgressWindow("Expanding Zotero AI Graph", { closeOnClick: false, closeTime: -1 });
     const mainLine = pw.createLine({ text: "Reading selected base articles...", type: "info", progress: 10 });
     pw.show();
 
     try {
       const localArticles = await extractZoteroItems(regularItems);
-      if (localArticles.length === 0) throw new Error("Could not read articles.");
+      if (localArticles.length === 0) throw new Error("Failed to read articles.");
 
       mainLine.changeLine({ text: "Searching for similar articles in the OpenAlex database...", progress: 30 });
       const titlesToSearch = localArticles.map(item => item.title);
@@ -141,17 +131,16 @@ class Addon {
       const subLine = pw.createLine({ text: "Searching for relationships and saving to Neo4j...", type: "info" });
 
       const combinedArticles = [...localArticles, ...webArticles];
-
       await runCloudPipeline(combinedArticles);
 
       mainLine.changeLine({ text: "Rendering expanded graph...", progress: 90 });
       subLine.changeLine({ text: "Data processed successfully.", type: "success" });
-
-      await this.openGraphWindow(); 
+      
+      const itemIds = combinedArticles.map(item => item.id);
+      await this.openGraphWindow(itemIds); 
 
       mainLine.changeLine({ text: "Done!", progress: 100 });
       setTimeout(() => pw.close(), 800);
-
     } catch (error: any) { 
       mainLine.changeLine({ text: "An error occurred during expansion!", type: "error", progress: 0 });
       pw.createLine({ text: error?.message || String(error), type: "error" });

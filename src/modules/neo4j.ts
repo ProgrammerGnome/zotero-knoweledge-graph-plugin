@@ -6,7 +6,7 @@ export interface GraphNode {
   title: string;
   year: string;
   summary: string;
-  type: string;
+  origin: string;
 }
 
 export interface GraphEdge {
@@ -20,16 +20,22 @@ export interface GraphData {
   edges: GraphEdge[];
 }
 
-export async function fetchGraphData(): Promise<GraphData> {
-  ztoolkit.log("Fetching graph data from the cloud...");
+export async function fetchGraphData(ids?: string[]): Promise<GraphData> {
+  ztoolkit.log("Gráf adatok lekérése a felhőből...");
   try {
-    const response = await fetch(CLOUD_FUNCTION_URL, {
+    let url = CLOUD_FUNCTION_URL;
+    
+    if (ids && ids.length > 0) {
+      url += `?ids=${encodeURIComponent(ids.join(','))}`;
+    }
+
+    const response = await fetch(url, {
       method: "GET",
       headers: { "Content-Type": "application/json" },
       credentials: "omit"
     });
     
-    if (!response.ok) throw new Error("Network error while querying the cloud.");
+    if (!response.ok) throw new Error("Hálózati hiba a felhő lekérdezésekor.");
     const json = (await response.json()) as any;
     
     return {
@@ -37,7 +43,7 @@ export async function fetchGraphData(): Promise<GraphData> {
       edges: json.edges || []
     };
   } catch (error) {
-    ztoolkit.log("Error fetching graph:", error);
+    ztoolkit.log("Hiba a gráf lekérésekor:", error);
     return { nodes: [], edges: [] };
   }
 }

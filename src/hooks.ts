@@ -33,9 +33,9 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
       const dialogText = 
         "Select which AI function you would like to start!\n\n" +
         "📚 1. Build Local Graph:\n" +
-        "AI analysis and visualization of existing articles in your Zotero library.\n\n" +
+        "AI analysis and visualization of selected articles in your Zotero library.\n\n" +
         "🌐 2. Web Expansion (OpenAlex):\n" +
-        "Search for similar publications on the web based on local articles, and analyze them.";
+        "Search for similar publications on the web based on selected articles, and analyze them.";
 
       try {
         const Services = (globalThis as any).Services;
@@ -51,9 +51,9 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
           "Zotero AI Knowledge Map Dashboard",
           dialogText,
           flags,
-          "1. Local Graph", 
-          "2. Web Expansion", 
-          "Cancel", 
+          "1. Local Graph",
+          "2. Web Expansion",
+          "Cancel",
           null,
           { value: false }
         );
@@ -64,8 +64,6 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
           addon.expandKnowledgeGraph();
         }
       } catch (error) {
-        ztoolkit.log("Native window could not be started, falling back to built-in prompt.");
-        
         const fallbackResult = win.prompt(
           dialogText + "\n\nENTER THE NUMBER OF THE CHOSEN FUNCTION (1 or 2):",
           "1"
@@ -77,7 +75,15 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
           addon.expandKnowledgeGraph();
         }
       }
-      
+    },
+  });
+
+  ztoolkit.Menu.register("menuTools", {
+    tag: "menuitem",
+    id: "zotero-menuitem-ai-graph-full",
+    label: "Zotero AI: View Full Graph",
+    commandListener: () => {
+      addon.showFullGraph();
     },
   });
 }
@@ -100,11 +106,9 @@ async function onNotify(
   type: string,
   ids: Array<string | number>,
   extraData: { [key: string]: any },
-) {
-}
+) {}
 
-async function onPrefsEvent(type: string, data: { [key: string]: any }) {
-}
+async function onPrefsEvent(type: string, data: { [key: string]: any }) {}
 
 export default {
   onStartup,
