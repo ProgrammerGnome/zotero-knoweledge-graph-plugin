@@ -1,12 +1,17 @@
 // src/modules/pipeline.ts
 
 // IDE ILLYESZD BE A GOOGLE CLOUD RUN TRIGGER URL-EDET:
-//const CLOUD_FUNCTION_URL = "https://zotero-plugin-189833862333.us-central1.run.app";
 const CLOUD_FUNCTION_URL = "https://zotero-content-graph-plugin-function-189833862333.us-central1.run.app";
 
-export async function extractZoteroItems(): Promise<{id: string, title: string, year: string, text: string, origin: string}[]> {
+// ÚJ: A függvény most már elfogad egy opcionális `specificItems` tömböt
+export async function extractZoteroItems(specificItems?: any[]): Promise<{id: string, title: string, year: string, text: string, origin: string}[]> {
   ztoolkit.log("Zotero elemek lekérdezése...");
-  const items = await Zotero.Items.getAll(Zotero.Libraries.userLibraryID, true, false);
+  
+  // Ha kaptunk konkrét cikkeket, azokat használjuk, ha nem, beolvassuk az egészet
+  const items = (specificItems && specificItems.length > 0) 
+    ? specificItems 
+    : await Zotero.Items.getAll(Zotero.Libraries.userLibraryID, true, false);
+    
   const results = [];
 
   for (const item of items) {
@@ -34,7 +39,7 @@ export async function extractZoteroItems(): Promise<{id: string, title: string, 
         title: title,
         year: year,
         text: textContent.substring(0, 8000),
-        origin: "local" // <--- ÚJ: Megjelöljük helyi cikként
+        origin: "local"
       });
     }
   }
@@ -65,10 +70,8 @@ export async function runCloudPipeline(articles: any[]) {
   }
 }
 
-// 1. Segédfüggvény a nagyon rövid várakozáshoz
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// 2. Segédfüggvény az OpenAlex absztraktok visszaállításához
 function reconstructAbstract(invertedIndex: any): string | null {
   if (!invertedIndex) return null;
   const words: string[] = [];
@@ -80,12 +83,10 @@ function reconstructAbstract(invertedIndex: any): string | null {
   return words.filter(w => w !== undefined).join(' ');
 }
 
-// 3. Főfüggvény a kereséshez (OpenAlex verzió)
 export async function fetchRelatedPapersFromWeb(titles: string[]): Promise<any[]> {
   ztoolkit.log("Keresés a weben hasonló cikkek után (OpenAlex)...");
   const relatedArticles = [];
   
-  // !!! KÉRLEK ÍRD ÁT A SAJÁT EMAIL CÍMEDRE !!!
   const YOUR_EMAIL = "hallgato@uni.hu"; 
   const mailtoParam = `mailto=${YOUR_EMAIL}`;
 
@@ -131,7 +132,7 @@ export async function fetchRelatedPapersFromWeb(titles: string[]): Promise<any[]
               title: paper.title,
               year: paper.publication_year ? String(paper.publication_year) : "Ismeretlen",
               text: `[Webről importálva OpenAlex API-n keresztül] ${abstractText}`,
-              origin: "web" // <--- ÚJ: Megjelöljük webről érkezettként
+              origin: "web" 
             });
             ztoolkit.log(`+ Hozzáadva: ${paper.title}`);
           }
