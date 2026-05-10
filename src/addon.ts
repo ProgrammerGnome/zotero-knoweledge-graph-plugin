@@ -77,16 +77,27 @@ class Addon {
     try {
       mainLine.changeLine({ text: `Reading selected articles (${regularItems.length} items)...`, progress: 20 });
       const limitedItems = await extractZoteroItems(regularItems); 
+      const itemIds = limitedItems.map(item => item.id);
       
-      mainLine.changeLine({ text: `AI analysis in progress (${limitedItems.length} articles)...`, progress: 50 });
-      const subLine = pw.createLine({ text: "Searching for relationships in Neo4j...", type: "info" });
+      mainLine.changeLine({ text: "Checking existing database entries...", progress: 30 });
+      const existingGraph = await fetchGraphData(itemIds);
+      const existingIds = new Set(existingGraph.nodes.map(node => node.id));
+      
+      const newItems = limitedItems.filter(item => !existingIds.has(item.id));
 
-      await runCloudPipeline(limitedItems);
+      if (newItems.length > 0) {
+        mainLine.changeLine({ text: `AI analysis in progress (${newItems.length} new articles)...`, progress: 50 });
+        const subLine = pw.createLine({ text: "Searching for relationships in Neo4j...", type: "info" });
+  
+        await runCloudPipeline(newItems);
+  
+        subLine.changeLine({ text: "Data processed successfully.", type: "success" });
+      } else {
+        mainLine.changeLine({ text: "All selected articles are already in the database. Skipping AI analysis.", progress: 80 });
+      }
 
       mainLine.changeLine({ text: "Rendering graph...", progress: 90 });
-      subLine.changeLine({ text: "Data processed successfully.", type: "success" });
-
-      const itemIds = limitedItems.map(item => item.id);
+      
       await this.openGraphWindow(itemIds); 
 
       mainLine.changeLine({ text: "Done!", progress: 100 });
@@ -127,21 +138,33 @@ class Addon {
         return;
       }
 
-      mainLine.changeLine({ text: `AI analysis (${localArticles.length} local + ${webArticles.length} web articles)...`, progress: 60 });
-      const subLine = pw.createLine({ text: "Searching for relationships and saving to Neo4j...", type: "info" });
-
       const combinedArticles = [...localArticles, ...webArticles];
-      await runCloudPipeline(combinedArticles);
+      const allItemIds = combinedArticles.map(item => item.id);
+
+      mainLine.changeLine({ text: "Checking existing database entries...", progress: 50 });
+      const existingGraph = await fetchGraphData(allItemIds);
+      const existingIds = new Set(existingGraph.nodes.map(node => node.id));
+
+      const newArticles = combinedArticles.filter(item => !existingIds.has(item.id));
+
+      if (newArticles.length > 0) {
+        mainLine.changeLine({ text: `AI analysis (${newArticles.length} new articles out of ${combinedArticles.length})...`, progress: 60 });
+        const subLine = pw.createLine({ text: "Searching for relationships and saving to Neo4j...", type: "info" });
+  
+        await runCloudPipeline(newArticles);
+  
+        subLine.changeLine({ text: "Data processed successfully.", type: "success" });
+      } else {
+        mainLine.changeLine({ text: "All found articles already exist in the database.", progress: 80 });
+      }
 
       mainLine.changeLine({ text: "Rendering expanded graph...", progress: 90 });
-      subLine.changeLine({ text: "Data processed successfully.", type: "success" });
-      
-      const itemIds = combinedArticles.map(item => item.id);
-      await this.openGraphWindow(itemIds); 
+
+      await this.openGraphWindow(allItemIds); 
 
       mainLine.changeLine({ text: "Done!", progress: 100 });
       setTimeout(() => pw.close(), 800);
-    } catch (error: any) { 
+    } catch (error: any) {
       mainLine.changeLine({ text: "An error occurred during expansion!", type: "error", progress: 0 });
       pw.createLine({ text: error?.message || String(error), type: "error" });
       pw.startCloseTimer(8000); 

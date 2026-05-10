@@ -22,7 +22,7 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
   ztoolkit.Menu.register("menuTools", {
     tag: "menuitem",
     id: "zotero-menuitem-ai-graph-main",
-    label: "Zotero AI Knowledge Map...",
+    label: "Zotero Plugin: View Selected Subgraph",
     commandListener: () => {
       const dialogText = 
         "Select which AI function you would like to start!\n\n" +
@@ -40,20 +40,19 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
         
         const result = promptService.confirmEx(
           win,
-          "Zotero AI Knowledge Map Dashboard",
+          "Zotero Plugin: Knowledge Graph Dashboard",
           dialogText,
           flags,
-          "2. Web Expansion",
-          "Cancel",
           "1. Local Graph",
+          "Cancel",
+          "2. Web Expansion",
           null,
           { value: false }
         );
-        
         if (result === 0) {
-          addon.expandKnowledgeGraph();
-        } else if (result === 2) {
           addon.runAiPipelineAndVisualize();
+        } else if (result === 2) {
+          addon.expandKnowledgeGraph();
         }
       } catch (error) {
         const fallbackResult = win.prompt(
@@ -71,7 +70,7 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
   ztoolkit.Menu.register("menuTools", {
     tag: "menuitem",
     id: "zotero-menuitem-ai-graph-full",
-    label: "Zotero AI: View Full Graph",
+    label: "Zotero Plugin: View Full Graph",
     commandListener: () => {
       addon.showFullGraph();
     },
