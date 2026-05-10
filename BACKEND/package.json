@@ -1,0 +1,13 @@
+{
+  "name": "zotero-cloud-run-function",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.3.0",
+    "@google/generative-ai": "^0.11.0",
+    "neo4j-driver": "^5.20.0",
+    "cors": "^2.8.5",
+    "pino": "^9.0.0",
+    "@google-cloud/storage": "^7.10.0"
+  }
+}
