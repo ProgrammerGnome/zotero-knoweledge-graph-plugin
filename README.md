@@ -36,6 +36,10 @@ The Zotero client alone does not provide sufficient computational capacity to ru
 
 ![](/ZoteroPlugin.png)
 
+### Flowchart
+
+![](/ZoteroPlugin_FC.png)
+
 ### Cloud Services Used and Their Roles
 
 1. **Google Cloud Run:** A fully managed, serverless runtime environment for the Node.js Express backend. It receives client requests and orchestrates API calls.
