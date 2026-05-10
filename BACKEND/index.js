@@ -149,8 +149,8 @@ functions.http('zoteroPipeline', (req, res) => {
           }
 
           // 3. Élek generálása AI-val
-          if (articlesForRelationship.length > 1) {
-            const relPrompt = `Te egy tudományos asszisztens vagy. Az alábbi JSON tömbben cikkek azonosítóit, címeit és összefoglalóit látod. Keresd meg a logikai kapcsolatokat. Válaszként KIZÁRÓLAG egy érvényes JSON tömböt adj vissza, markdown nélkül: [{"source": "id1", "target": "id2", "type": "KAPCSOLAT_TÍPUSA"}]. Típusok: EXTENDS, REFUTES, SUPPORTS, APPLIES, COMPARES. Cikkek: ${JSON.stringify(articlesForRelationship)}`;
+          const relPrompt = `Te egy tudományos asszisztens vagy. Az alábbi JSON tömbben cikkek azonosítóit, címeit és összefoglalóit látod. A feladatod, hogy találd meg a logikai kapcsolatokat a cikkek között! Kérlek, légy proaktív: próbálj meg minden cikkhez legalább 1-2 kapcsolódási pontot találni. Még ha lazább is a kapcsolat, kösd össze őket (például használd a COMPARES típust, ha a témájuk hasonló). 
+Válaszként KIZÁRÓLAG egy érvényes JSON tömböt adj vissza, markdown nélkül: [{"source": "id1", "target": "id2", "type": "KAPCSOLAT_TÍPUSA"}]. Típusok: EXTENDS, REFUTES, SUPPORTS, APPLIES, COMPARES. Cikkek: ${JSON.stringify(articlesForRelationship)}`;
 
             const startRelLlm = Date.now();
             const relResult = await model.generateContent(relPrompt);

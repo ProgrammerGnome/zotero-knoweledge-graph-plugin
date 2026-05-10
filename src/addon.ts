@@ -89,7 +89,7 @@ class Addon {
         mainLine.changeLine({ text: `AI analysis in progress (${newItems.length} new articles)...`, progress: 50 });
         const subLine = pw.createLine({ text: "Searching for relationships in Neo4j...", type: "info" });
   
-        await runCloudPipeline(newItems);
+        await runCloudPipeline(limitedItems);
   
         subLine.changeLine({ text: "Data processed successfully.", type: "success" });
       } else {
@@ -151,7 +151,7 @@ class Addon {
         mainLine.changeLine({ text: `AI analysis (${newArticles.length} new articles out of ${combinedArticles.length})...`, progress: 60 });
         const subLine = pw.createLine({ text: "Searching for relationships and saving to Neo4j...", type: "info" });
   
-        await runCloudPipeline(newArticles);
+        await runCloudPipeline(combinedArticles);
   
         subLine.changeLine({ text: "Data processed successfully.", type: "success" });
       } else {

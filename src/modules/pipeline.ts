@@ -79,7 +79,7 @@ function reconstructAbstract(invertedIndex: any): string | null {
 }
 
 export async function fetchRelatedPapersFromWeb(titles: string[]): Promise<any[]> {
-  ztoolkit.log("Searching the web for similar articles (OpenAlex)...");
+  ztoolkit.log("Searching the web for similar articles (OpenAlex Related Works)...");
   const relatedArticles = [];
   
   const YOUR_EMAIL = "hallgato@uni.hu"; 
@@ -87,7 +87,7 @@ export async function fetchRelatedPapersFromWeb(titles: string[]): Promise<any[]
 
   for (const title of titles) {
     try {
-      ztoolkit.log(`Searching OpenAlex: "${title}"`);
+      ztoolkit.log(`Searching OpenAlex for exact paper: "${title}"`);
       
       if (title === "Unknown title" || title.length < 5) {
           ztoolkit.log("Skipped: Invalid title.");
@@ -95,19 +95,28 @@ export async function fetchRelatedPapersFromWeb(titles: string[]): Promise<any[]
       }
 
       const query = encodeURIComponent(title);
-      const searchUrl = `https://api.openalex.org/works?search=${query}&per-page=1&${mailtoParam}`;
+      
+      const searchUrl = `https://api.openalex.org/works?filter=title.search:${query}&per-page=5&${mailtoParam}`;
       
       const searchRes = await fetch(searchUrl);
       if (!searchRes.ok) continue;
       
       const searchData = (await searchRes.json()) as any;
-      if (!searchData.results || searchData.results.length === 0) continue;
+      if (!searchData.results || searchData.results.length === 0) {
+          ztoolkit.log("Not found in OpenAlex database.");
+          continue;
+      }
 
-      const work = searchData.results[0];
-      const openAlexId = work.id;
+      let work = searchData.results.find((w: any) => 
+          w.title && w.title.toLowerCase().includes(title.toLowerCase().substring(0, 15))
+      );
+      if (!work) work = searchData.results[0];
       
       const relatedWorksUrls = work.related_works;
-      if (!relatedWorksUrls || relatedWorksUrls.length === 0) continue;
+      if (!relatedWorksUrls || relatedWorksUrls.length === 0) {
+          ztoolkit.log(`No related works found in OpenAlex for: ${work.title}`);
+          continue;
+      }
 
       const topRelatedIds = relatedWorksUrls.slice(0, 3).map((url: string) => url.split('/').pop());
       const filterParam = `openalex:${topRelatedIds.join('|')}`;
@@ -129,7 +138,7 @@ export async function fetchRelatedPapersFromWeb(titles: string[]): Promise<any[]
               text: `[Imported from web via OpenAlex API] ${abstractText}`,
               origin: "web" 
             });
-            ztoolkit.log(`+ Added: ${paper.title}`);
+            ztoolkit.log(`+ Added related work: ${paper.title}`);
           }
         }
       }
