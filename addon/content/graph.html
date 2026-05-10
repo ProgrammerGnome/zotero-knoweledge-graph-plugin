@@ -42,7 +42,7 @@
         <div id="info-panel">
             <h2 id="panel-title">Knowledge Map</h2>
             <span id="panel-year" class="year">Select an article</span>
-            <p id="panel-summary-text" style="font-size: 12px; line-height: 1.4;">Click on nodes or scroll to zoom.</p>
+            <p id="panel-summary-text" style="font-size: 12px; line-height: 1.4;">Click on nodes to view details, drag to move them, or scroll to zoom.</p>
         </div>
         <canvas id="graphCanvas"></canvas>
     </div>
@@ -54,7 +54,7 @@
                     <th></th>
                     <th>Year</th>
                     <th>Title</th>
-                    <th>Summary (AI)</th>
+                    <th>Summary</th>
                 </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -74,7 +74,7 @@
             const radius = 22;
 
             let offsetX = 0, offsetY = 0, scale = 1;
-            let isDragging = false, startX = 0, startY = 0, dragDist = 0;
+            let isPanning = false, draggedNode = null, startX = 0, startY = 0, dragDist = 0;
 
             function resize() {
                 const container = document.getElementById('graph-container');
@@ -112,20 +112,20 @@
                 const outHtml = outgoing.length > 0 ? outgoing.map(e => {
                     const targetNode = nodes.find(n => String(n.id) === String(e.target));
                     return `<div class="rel-box"><span class="rel-label">[${e.type}]</span> ➔ <span class="rel-item">${targetNode ? targetNode.title : 'Unknown'}</span></div>`;
-                }).join('') : '<i> No outgoing references.</i>';
+                }).join('') : '<i>No outgoing references.</i>';
 
                 const inHtml = incoming.length > 0 ? incoming.map(e => {
                     const sourceNode = nodes.find(n => String(n.id) === String(e.source));
                     return `<div class="rel-box"><span class="rel-label">[${e.type}]</span> ➔ <span class="rel-item">${sourceNode ? sourceNode.title : 'Unknown'}</span> references this</div>`;
-                }).join('') : '<i> No incoming references.</i>';
+                }).join('') : '<i>No incoming references.</i>';
 
                 detailTr.innerHTML = `
                     <td colspan="4">
                         <div class="details-container">
-                            <strong>AI Summary:</strong> <p>${node.summary}</p>
+                            <strong>Summary:</strong> <p>${node.summary}</p>
                             <div style="display:flex; gap: 40px;">
-                                <div><strong>References (Results):</strong>${outHtml}</div>
-                                <div><strong>Referenced by (Sources):</strong>${inHtml}</div>
+                                <div><strong>References:</strong>${outHtml}</div>
+                                <div><strong>Referenced by:</strong>${inHtml}</div>
                             </div>
                         </div>
                     </td>
@@ -145,8 +145,40 @@
                 tbody.appendChild(detailTr);
             });
 
-            canvas.addEventListener('mousedown', (e) => { isDragging = true; dragDist = 0; startX = e.clientX - offsetX; startY = e.clientY - offsetY; });
-            canvas.addEventListener('mousemove', (e) => { if (isDragging) { dragDist += Math.abs(e.movementX) + Math.abs(e.movementY); offsetX = e.clientX - startX; offsetY = e.clientY - startY; draw(); } });
+            canvas.addEventListener('mousedown', (e) => { 
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                const clickX = (mouseX - offsetX) / scale;
+                const clickY = (mouseY - offsetY) / scale;
+                
+                draggedNode = nodes.find(n => Math.hypot(n.x - clickX, n.y - clickY) < radius);
+                
+                if (!draggedNode) {
+                    isPanning = true;
+                    startX = e.clientX - offsetX;
+                    startY = e.clientY - offsetY;
+                }
+                dragDist = 0;
+            });
+            
+            canvas.addEventListener('mousemove', (e) => { 
+                if (draggedNode) {
+                    const rect = canvas.getBoundingClientRect();
+                    const mouseX = e.clientX - rect.left;
+                    const mouseY = e.clientY - rect.top;
+                    draggedNode.x = (mouseX - offsetX) / scale;
+                    draggedNode.y = (mouseY - offsetY) / scale;
+                    dragDist += Math.abs(e.movementX) + Math.abs(e.movementY);
+                    draw();
+                } else if (isPanning) { 
+                    dragDist += Math.abs(e.movementX) + Math.abs(e.movementY); 
+                    offsetX = e.clientX - startX; 
+                    offsetY = e.clientY - startY; 
+                    draw(); 
+                } 
+            });
+            
             canvas.addEventListener('wheel', (e) => {
                 e.preventDefault();
                 const zoomSensitivity = 0.001;
@@ -162,7 +194,6 @@
             });
 
             canvas.addEventListener('mouseup', (e) => { 
-                isDragging = false; 
                 if (dragDist < 5) {
                     const rect = canvas.getBoundingClientRect();
                     const clickX = (e.clientX - rect.left - offsetX) / scale;
@@ -174,8 +205,14 @@
                         document.getElementById('panel-summary-text').innerText = node.summary;
                     }
                 }
+                draggedNode = null;
+                isPanning = false; 
             });
-            canvas.addEventListener('mouseleave', () => isDragging = false);
+            
+            canvas.addEventListener('mouseleave', () => {
+                draggedNode = null;
+                isPanning = false;
+            });
 
             function drawCurvedArrow(ctx, start, end, label, curveOffset, nodeRadius) {
                 const headlen = 10;
@@ -216,10 +253,14 @@
 
                 Object.values(edgeGroups).forEach(group => {
                     group.forEach((edge, index) => {
-                        const s = nodes.find(n => String(n.id) === String(edge.source)), t = nodes.find(n => String(n.id) === String(edge.target));
+                        const s = nodes.find(n => String(n.id) === String(edge.source));
+                        const t = nodes.find(n => String(n.id) === String(edge.target));
                         if (s && t) {
-                            let curve = group.length > 1 ? (index - (group.length - 1) / 2) * 35 : 0;
-                            drawCurvedArrow(ctx, t, s, edge.type, curve, radius);
+                            let curve = group.length > 1 ? (index - (group.length - 1) / 2) * 45 : 0;
+                            if (String(s.id) > String(t.id)) {
+                                curve = -curve;
+                            }
+                            drawCurvedArrow(ctx, s, t, edge.type, curve, radius);
                         }
                     });
                 });
