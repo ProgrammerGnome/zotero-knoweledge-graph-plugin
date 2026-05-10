@@ -42,7 +42,7 @@ The Zotero client alone does not provide sufficient computational capacity to ru
 
 2. **Neo4j AuraDB:** A cloud-native graph database that stores articles as nodes and references as relationships.
 
-3. **Google Generative AI (Gemini 1.5 Flash):** Responsible for text understanding, summary generation, and extracting logical relationships between articles in JSON format.
+3. **Google Generative AI (gemini-3-flash-preview):** Responsible for text understanding, summary generation, and extracting logical relationships between articles in JSON format.
 
 4. **Google Cloud Storage (GCS):** Stores backups of the graph’s current state in JSON format.
 
