@@ -260,7 +260,8 @@
                             if (String(s.id) > String(t.id)) {
                                 curve = -curve;
                             }
-                            drawCurvedArrow(ctx, s, t, edge.type, curve, radius);
+                            //drawCurvedArrow(ctx, s, t, edge.type, curve, radius);
+                            drawCurvedArrow(ctx, t, s, edge.type, curve, radius);
                         }
                     });
                 });
