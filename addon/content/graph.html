@@ -43,6 +43,7 @@
             <h2 id="panel-title">Knowledge Map</h2>
             <span id="panel-year" class="year">Select an article</span>
             <p id="panel-summary-text" style="font-size: 12px; line-height: 1.4;">Click on nodes to view details, drag to move them, or scroll to zoom.</p>
+            <button id="delete-node-btn" style="display:none; margin-top:10px; width:100%; background:#d32f2f; color:white; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold;">Delete from Database</button>
         </div>
         <canvas id="graphCanvas"></canvas>
     </div>
@@ -75,6 +76,9 @@
 
             let offsetX = 0, offsetY = 0, scale = 1;
             let isPanning = false, draggedNode = null, startX = 0, startY = 0, dragDist = 0;
+
+            let selectedNode = null;
+            const deleteBtn = document.getElementById('delete-node-btn');
 
             function resize() {
                 const container = document.getElementById('graph-container');
@@ -193,20 +197,28 @@
                 draw();
             });
 
-            canvas.addEventListener('mouseup', (e) => { 
+            canvas.addEventListener('mouseup', (e) => {
                 if (dragDist < 5) {
                     const rect = canvas.getBoundingClientRect();
                     const clickX = (e.clientX - rect.left - offsetX) / scale;
                     const clickY = (e.clientY - rect.top - offsetY) / scale;
                     const node = nodes.find(n => Math.hypot(n.x - clickX, n.y - clickY) < radius + 10);
+                    
                     if (node) {
                         document.getElementById('panel-title').innerText = node.title;
                         document.getElementById('panel-year').innerText = "Year: " + node.year;
                         document.getElementById('panel-summary-text').innerText = node.summary;
+                        
+                        selectedNode = node;
+                        deleteBtn.style.display = 'block';
+                    } else {
+                        selectedNode = null;
+                        deleteBtn.style.display = 'none';
                     }
                 }
+
                 draggedNode = null;
-                isPanning = false; 
+                isPanning = false;
             });
             
             canvas.addEventListener('mouseleave', () => {
@@ -278,6 +290,37 @@
                 });
                 ctx.restore();
             }
+
+            deleteBtn.onclick = async () => {
+                if (!selectedNode) return;
+                if (!confirm(`Biztosan törölni szeretnéd a(z) "${selectedNode.title}" cikket és az összes kapcsolódó élet az adatbázisból?`)) return;
+
+                const success = await Zotero.AddonTemplate.deleteNodeById(selectedNode.id);
+                
+                if (success) {
+                    const nIdx = nodes.indexOf(selectedNode);
+                    if (nIdx > -1) nodes.splice(nIdx, 1);
+
+                    for (let i = edges.length - 1; i >= 0; i--) {
+                        if (String(edges[i].source) === String(selectedNode.id) || String(edges[i].target) === String(selectedNode.id)) {
+                            edges.splice(i, 1);
+                        }
+                    }
+
+                    selectedNode = null;
+                    deleteBtn.style.display = 'none';
+                    document.getElementById('panel-title').innerText = "Knowledge Map";
+                    document.getElementById('panel-year').innerText = "Node deleted successfully.";
+                    document.getElementById('panel-summary-text').innerText = "";
+
+                    draw();
+
+                    location.reload();
+                } else {
+                    alert("Hiba történt a törlés során a felhőben.");
+                }
+            };
+
             draw();
         };
     </script>

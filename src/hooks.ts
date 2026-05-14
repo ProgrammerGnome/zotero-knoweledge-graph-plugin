@@ -75,6 +75,14 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
       addon.showFullGraph();
     },
   });
+  ztoolkit.Menu.register("menuTools", {
+    tag: "menuitem",
+    id: "zotero-menuitem-ai-graph-delete",
+    label: "Zotero Plugin: Delete Selected from Graph",
+    commandListener: () => {
+      addon.deleteSelectedFromGraph();
+    },
+  });
 }
 
 async function onMainWindowUnload(win: Window): Promise<void> {

@@ -47,3 +47,14 @@ export async function fetchGraphData(ids?: string[]): Promise<GraphData> {
     return { nodes: [], edges: [] };
   }
 }
+
+export async function deleteNodeFromGraph(id: string): Promise<boolean> {
+  try {
+    const url = `${CLOUD_FUNCTION_URL}?id=${encodeURIComponent(id)}`;
+    const response = await fetch(url, { method: "DELETE", credentials: "omit" });
+    return response.ok;
+  } catch (error) {
+    ztoolkit.log("Hiba a törléskor:", error);
+    return false;
+  }
+}

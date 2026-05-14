@@ -60,24 +60,47 @@ functions.http('zoteroPipeline', (req, res) => {
       }
 
       // ==========================================
-      // GET: Vizualizáció kiszolgálása a Zoterónak
+      // GET: Vizualizáció kiszolgálása a Zoterónak (MÓDOSÍTVA A SZŰRÉSHEZ)
       // ==========================================
       if (req.method === 'GET') {
         const session = driver.session();
         try {
-          const result = await session.run(`MATCH (n:Article)-[r]->(m:Article) RETURN n, type(r) as relType, m LIMIT 200`);
+          const idsParam = req.query.ids;
+          let query = "";
+          let params = {};
+
+          // Ha jött azonosító lista (pl. kijelölt cikkek), akkor szűrünk
+          if (idsParam) {
+            const idList = idsParam.split(',');
+            query = `
+              MATCH (n:Article) WHERE n.id IN $idList
+              OPTIONAL MATCH (n)-[r]->(m:Article) WHERE m.id IN $idList
+              RETURN n, type(r) as relType, m
+            `;
+            params = { idList };
+          } else {
+            // Ha nincs szűrés, lekérjük a teljes gráfot
+            query = `
+              MATCH (n:Article)
+              OPTIONAL MATCH (n)-[r]->(m:Article)
+              RETURN n, type(r) as relType, m
+              LIMIT 500
+            `;
+          }
+
+          const result = await session.run(query, params);
           const nodesMap = new Map();
           const edges = [];
 
           result.records.forEach(record => {
             const n = record.get('n').properties;
-            const m = record.get('m').properties;
+            const m = record.get('m') ? record.get('m').properties : null;
             const relType = record.get('relType');
 
-            // ÚJ: Origin mező továbbítása a Zotero grafikus megjelenítőjének
+            // Origin mező továbbítása a Zotero grafikus megjelenítőjének
             if (!nodesMap.has(n.id)) nodesMap.set(n.id, { id: n.id, title: n.title, year: n.year, summary: n.summary, origin: n.origin || 'local' });
-            if (!nodesMap.has(m.id)) nodesMap.set(m.id, { id: m.id, title: m.title, year: m.year, summary: m.summary, origin: m.origin || 'local' });
-            edges.push({ source: n.id, target: m.id, type: relType });
+            if (m && !nodesMap.has(m.id)) nodesMap.set(m.id, { id: m.id, title: m.title, year: m.year, summary: m.summary, origin: m.origin || 'local' });
+            if (m && relType) edges.push({ source: n.id, target: m.id, type: relType });
           });
 
           return res.status(200).json({ nodes: Array.from(nodesMap.values()), edges });
@@ -94,9 +117,7 @@ functions.http('zoteroPipeline', (req, res) => {
         const articles = req.body.articles;
         if (!articles || articles.length === 0) return res.status(400).send("Nincsenek beküldött cikkek.");
 
-        //const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
         const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
-        //const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
         const session = driver.session();
         const tx = session.beginTransaction(); // TRANZAKCIÓ INDÍTÁSA
 
@@ -124,7 +145,7 @@ functions.http('zoteroPipeline', (req, res) => {
               logger.info({ durationMs: Date.now() - startLlm }, `LLM Összefoglaló generálva: ${art.id}`);
               summary = aiResult.response.text().trim();
 
-              // ÚJ: Origin mező beállítása és a megfelelő Címke (Label) dinamikus hozzáfűzése
+              // Origin mező beállítása és a megfelelő Címke (Label) dinamikus hozzáfűzése
               let query = `
                 MERGE (a:Article {id: $id}) 
                 SET a.title = $title, a.year = $year, a.summary = $summary, a.origin = $origin
@@ -149,8 +170,8 @@ functions.http('zoteroPipeline', (req, res) => {
           }
 
           // 3. Élek generálása AI-val
-          const relPrompt = `Te egy tudományos asszisztens vagy. Az alábbi JSON tömbben cikkek azonosítóit, címeit és összefoglalóit látod. A feladatod, hogy találd meg a logikai kapcsolatokat a cikkek között! Kérlek, légy proaktív: próbálj meg minden cikkhez legalább 1-2 kapcsolódási pontot találni. Még ha lazább is a kapcsolat, kösd össze őket (például használd a COMPARES típust, ha a témájuk hasonló). 
-Válaszként KIZÁRÓLAG egy érvényes JSON tömböt adj vissza, markdown nélkül: [{"source": "id1", "target": "id2", "type": "KAPCSOLAT_TÍPUSA"}]. Típusok: EXTENDS, REFUTES, SUPPORTS, APPLIES, COMPARES. Cikkek: ${JSON.stringify(articlesForRelationship)}`;
+          if (articlesForRelationship.length > 1) {
+            const relPrompt = `Te egy tudományos asszisztens vagy. Az alábbi JSON tömbben cikkek azonosítóit, címeit és összefoglalóit látod. Keresd meg a logikai kapcsolatokat. Válaszként KIZÁRÓLAG egy érvényes JSON tömböt adj vissza, markdown nélkül: [{"source": "id1", "target": "id2", "type": "KAPCSOLAT_TÍPUSA"}]. Típusok: EXTENDS, REFUTES, SUPPORTS, APPLIES, COMPARES. Cikkek: ${JSON.stringify(articlesForRelationship)}`;
 
             const startRelLlm = Date.now();
             const relResult = await model.generateContent(relPrompt);
@@ -164,10 +185,15 @@ Válaszként KIZÁRÓLAG egy érvényes JSON tömböt adj vissza, markdown nélk
 
             for (const rel of relationships) {
               if (rel.source && rel.target && rel.type) {
-                await tx.run(
-                  `MATCH (a:Article {id: $source}), (b:Article {id: $target}) MERGE (a)-[r:${rel.type}]->(b)`,
-                  { source: String(rel.source), target: String(rel.target) }
-                );
+                // TISZTÍTÁS (MÓDOSÍTVA): Csak tiszta alfanumerikus karaktereket engedünk be a típushoz
+                const safeType = String(rel.type).replace(/[^a-zA-Z0-9_]/g, '').toUpperCase();
+                
+                if (safeType) {
+                  await tx.run(
+                    `MATCH (a:Article {id: $source}), (b:Article {id: $target}) MERGE (a)-[r:${safeType}]->(b)`,
+                    { source: String(rel.source), target: String(rel.target) }
+                  );
+                }
               }
             }
           }
@@ -182,6 +208,24 @@ Válaszként KIZÁRÓLAG egy érvényes JSON tömböt adj vissza, markdown nélk
           await tx.rollback();
           logger.error({ error: error.message, stack: error.stack }, "Tranzakció visszavonva (ROLLBACK) hiba miatt.");
           res.status(500).json({ success: false, error: error.message });
+        } finally {
+          await session.close();
+          await driver.close();
+        }
+      }
+      
+      // ==========================================
+      // DELETE: Csomópont és élek törlése
+      // ==========================================
+      if (req.method === 'DELETE') {
+        const id = req.query.id;
+        if (!id) return res.status(400).send("Hiányzó ID.");
+
+        const session = driver.session();
+        try {
+          await session.run(`MATCH (a:Article {id: $id}) DETACH DELETE a`, { id: String(id) });
+          logger.info(`Törölve: ${id}`);
+          return res.status(200).json({ success: true });
         } finally {
           await session.close();
           await driver.close();

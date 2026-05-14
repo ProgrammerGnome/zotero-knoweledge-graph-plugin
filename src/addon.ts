@@ -2,7 +2,7 @@ import { config } from "../package.json";
 import { ColumnOptions, DialogHelper } from "zotero-plugin-toolkit";
 import hooks from "./hooks";
 import { createZToolkit } from "./utils/ztoolkit";
-import { fetchGraphData, GraphData } from "./modules/neo4j";
+import { fetchGraphData, deleteNodeFromGraph, GraphData } from "./modules/neo4j";
 import { extractZoteroItems, runCloudPipeline, fetchRelatedPapersFromWeb } from "./modules/pipeline";
 
 class Addon {
@@ -57,6 +57,49 @@ class Addon {
       pw.createLine({ text: error?.message || String(error), type: "error" });
       pw.startCloseTimer(8000);
     }
+  }
+
+  public async deleteSelectedFromGraph() {
+    const mainWindow = Zotero.getMainWindow();
+    const zoteroPane = Zotero.getActiveZoteroPane();
+    const selectedItems = zoteroPane ? zoteroPane.getSelectedItems() : [];
+    const regularItems = selectedItems.filter((item: any) => item.isRegularItem());
+
+    if (regularItems.length === 0) {
+      if (mainWindow) mainWindow.alert("Please select one or more articles to delete from the graph!");
+      return;
+    }
+
+    const confirm = mainWindow?.confirm(`Are you sure you want to delete ${regularItems.length} article(s) from the AI Knowledge Graph? (This will also remove all connected relationships).`);
+    if (!confirm) return;
+
+    const pw = new this.data.ztoolkit.ProgressWindow("Deleting from Knowledge Graph", { closeOnClick: false, closeTime: -1 });
+    const mainLine = pw.createLine({ text: "Deleting articles...", type: "info", progress: 0 });
+    pw.show();
+
+    try {
+      let deletedCount = 0;
+      for (const item of regularItems) {
+        const success = await deleteNodeFromGraph(item.key); 
+        if (success) deletedCount++;
+      }
+
+      mainLine.changeLine({ text: `Successfully deleted ${deletedCount} article(s).`, type: "success", progress: 100 });
+      setTimeout(() => pw.close(), 1500);
+      
+      if (this.data.graphData) {
+         this.showFullGraph();
+      }
+      
+    } catch (error: any) {
+      mainLine.changeLine({ text: "An error occurred during deletion!", type: "error", progress: 0 });
+      pw.createLine({ text: error?.message || String(error), type: "error" });
+      pw.startCloseTimer(8000); 
+    }
+  }
+  
+  public async deleteNodeById(id: string): Promise<boolean> {
+    return await deleteNodeFromGraph(id);
   }
 
   public async runAiPipelineAndVisualize() {
